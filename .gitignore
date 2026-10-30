@@ -5,4 +5,3 @@ __pycache__/
 ecommerce.duckdb
 ecommerce.duckdb.wal
 raw/
-csv/
