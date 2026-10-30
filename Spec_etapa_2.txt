@@ -1,0 +1,270 @@
+SPEC DA ETAPA 2 — TRANSFORMACAO DE RAW PARA REFINED
+
+CONTEXTO
+Estou construindo um pipeline de dados em Python sobre um dataset sintetico
+de comercio eletronico. Trabalho com spec-driven development: esta spec e a
+fonte da verdade e o codigo e consequencia dela. Nao acrescente requisito
+que nao esteja escrito aqui. Se algo estiver ambiguo, pergunte antes de
+escrever codigo.
+
+Esta spec complementa Spec.txt: a etapa 1 ja materializa os CSVs em raw e
+nao deve ser alterada por esta etapa.
+
+STACK
+- Python 3.12 ou superior, dependencias gerenciadas com uv
+- DuckDB 1.5.6, banco ecommerce.duckdb na raiz do projeto
+- Nenhum orquestrador. Script executavel pela linha de comando:
+    uv run python -m pipeline.transformacao
+
+O QUE JA EXISTE (use, nao reimplemente)
+pipeline/db.py expoe:
+  conectar()                  abre ecommerce.duckdb
+  criar_schema(con, nome)     CREATE SCHEMA IF NOT EXISTS
+  gravar(con, df, schema, tabela)
+O schema raw tem sete tabelas; todas as colunas sao VARCHAR. Os campos vazios
+dos CSVs foram carregados como NULL.
+
+ARTEFATO A PRODUZIR
+pipeline/transformacao.py, executavel com:
+  uv run python -m pipeline.transformacao
+
+SPEC
+
+1. ESCOPO
+   Le das sete tabelas em raw e grava as sete tabelas correspondentes em
+   refined. Nunca escreve em raw.
+
+   Arquivo de entrada -> tabela raw -> tabela refined:
+     customers.csv   -> raw.clientes      -> refined.clientes
+     order_items.csv -> raw.itens_pedido  -> refined.itens_pedido
+     orders.csv      -> raw.pedidos       -> refined.pedidos
+     payments.csv    -> raw.pagamentos    -> refined.pagamentos
+     products.csv    -> raw.produtos      -> refined.produtos
+     returns.csv     -> raw.devolucoes    -> refined.devolucoes
+     shipments.csv   -> raw.remessas      -> refined.remessas
+
+   Nao ha tabela excluida nesta proposta: nenhuma das sete foi indicada como
+   fora de escopo.
+
+2. NOMES
+   As tabelas refined mantem os nomes em portugues usados em raw. Todas as
+   colunas sao renomeadas conforme o mapa completo abaixo. Nenhuma coluna
+   pode ser descartada, criada ou ficar fora do mapa.
+
+   clientes
+     customer_id -> cliente_id
+     first_name -> primeiro_nome
+     last_name -> sobrenome
+     email -> email
+     phone -> telefone
+     country -> pais
+     city -> cidade
+     signup_date -> data_cadastro
+     loyalty_tier -> nivel_fidelidade
+     marketing_opt_in -> aceita_marketing
+
+   devolucoes
+     return_id -> devolucao_id
+     order_item_id -> item_pedido_id
+     reason -> motivo
+     refund_amount -> valor_reembolso
+     requested_at -> data_solicitacao
+     status -> status
+
+   itens_pedido
+     order_item_id -> item_pedido_id
+     order_id -> pedido_id
+     product_id -> produto_id
+     quantity -> quantidade
+     unit_price -> preco_unitario
+     line_total -> total_item
+
+   pagamentos
+     payment_id -> pagamento_id
+     order_id -> pedido_id
+     method -> metodo
+     amount -> valor
+     paid_at -> data_pagamento
+     status -> status
+
+   pedidos
+     order_id -> pedido_id
+     customer_id -> cliente_id
+     order_date -> data_pedido
+     status -> status
+     channel -> canal
+     subtotal -> subtotal
+     discount_amount -> valor_desconto
+     shipping_fee -> valor_frete
+     tax_amount -> valor_imposto
+     total_amount -> valor_total
+     currency -> moeda
+
+   produtos
+     product_id -> produto_id
+     sku -> sku
+     product_name -> nome_produto
+     category -> categoria
+     brand -> marca
+     unit_price -> preco_unitario
+     unit_cost -> custo_unitario
+     weight_kg -> peso_kg
+     is_active -> ativo
+     created_at -> data_criacao
+
+   remessas
+     shipment_id -> remessa_id
+     order_id -> pedido_id
+     carrier -> transportadora
+     tracking_number -> codigo_rastreio
+     shipped_at -> data_envio
+     delivered_at -> data_entrega
+     status -> status
+
+3. TIPOS
+   A conversao e feita em SQL pelo DuckDB. IDs, codigos, descricoes,
+   categorias, status e demais campos nao listados abaixo continuam VARCHAR.
+   Em particular, IDs numericos continuam VARCHAR: sao identificadores, nao
+   medidas, e preserva-los como texto evita alteracao de seu formato.
+
+   Datas que representam somente dia: DATE.
+     clientes.data_cadastro       formato de origem '%Y-%m-%d'
+     devolucoes.data_solicitacao  formato '%Y-%m-%d %H:%M:%S'
+     produtos.data_criacao        formato de origem '%Y-%m-%d'
+     remessas.data_envio          formato '%Y-%m-%d %H:%M:%S'
+     remessas.data_entrega        formato '%Y-%m-%d %H:%M:%S'
+   Nas colunas de remessas e devolucoes, a hora observada e sempre
+   00:00:00; guarda-la como hora acrescentaria uma precisao que os dados nao
+   tem.
+
+   Data e hora: TIMESTAMP, formato '%Y-%m-%d %H:%M:%S'.
+     pedidos.data_pedido
+     pagamentos.data_pagamento
+   Ha horarios diferentes de meia-noite nessas colunas, portanto nao devem
+   ser reduzidas a DATE.
+
+   Valores monetarios: DECIMAL(10,2).
+     devolucoes.valor_reembolso
+     itens_pedido.preco_unitario, itens_pedido.total_item
+     pagamentos.valor
+     pedidos.subtotal, pedidos.valor_desconto, pedidos.valor_frete,
+       pedidos.valor_imposto, pedidos.valor_total
+     produtos.preco_unitario, produtos.custo_unitario
+   DECIMAL preserva os centavos sem a imprecisao de ponto flutuante.
+
+   Contagem: INTEGER.
+     itens_pedido.quantidade
+
+   Medida: DECIMAL(10,2).
+     produtos.peso_kg
+
+   Flags com origem '0'/'1': BOOLEAN.
+     clientes.aceita_marketing
+     produtos.ativo
+   Motivo: ambos os campos representam escolhas/estados binarios, nao
+   contagens.
+
+   Nao converta moeda: pedidos.moeda continua VARCHAR, mesmo que os dados
+   atuais contenham somente USD.
+
+4. CONVERSAO QUE FALHA
+   Datas, numeros e flags devem ser convertidos por CAST/strptime no DuckDB,
+   sem try_strptime, TRY_CAST ou conversao que transforme erro em NULL.
+   Se qualquer valor nao puder ser convertido, interrompa a etapa com
+   sys.exit(1) e informe tabela, coluna, valor que falhou e erro original.
+   Motivo: um nulo criado por uma conversao com falha fica indistinguivel de
+   um nulo que ja existia na fonte.
+
+5. DUPLICATAS
+   Chave de cada tabela:
+     clientes      (cliente_id)
+     devolucoes    (devolucao_id)
+     itens_pedido  (item_pedido_id)
+     pagamentos   (pagamento_id)
+     pedidos       (pedido_id)
+     produtos      (produto_id)
+     remessas      (remessa_id)
+
+   Linha inteira repetida: mantem uma e conta quantas foram removidas.
+   Chave repetida com conteudo diferente: interrompe, mostra a chave e as
+   linhas conflitantes, e encerra com sys.exit(1). Nao escolhe uma linha em
+   silencio.
+   Motivo: descartar conteudo diferente seria uma decisao de negocio sem
+   criterio registrado.
+
+6. NULOS E VALORES
+   Nenhuma linha e apagada por conter NULL e nenhum NULL e preenchido.
+   Valores textuais nao sao traduzidos, corrigidos, normalizados ou
+   substituidos. As conversoes de tipo e a renomeacao de colunas sao as
+   unicas alteracoes desta etapa.
+
+   No banco analisado, os nulos existentes sao:
+     clientes.telefone       8.645
+     produtos.peso_kg            78
+     remessas.data_entrega       714
+   Todos os demais campos das sete tabelas nao tinham nulos na analise.
+   Esses nulos devem continuar nulos em refined.
+
+   Nao recalcula totais, nao altera status e nao exige correspondencia
+   referencial como condicao para gravar. Na analise atual, nao foram
+   encontrados itens sem pedido/produto, pagamentos sem pedido, pedidos sem
+   cliente, devolucoes sem item ou remessas sem pedido. A etapa nao deve
+   corrigir fatos de negocio.
+
+7. SAIDA NA TELA
+   Uma linha por tabela no formato:
+     refined.clientes             26.000 -> 26.000 linhas (0 duplicatas)
+   A contagem antes/depois e a quantidade de duplicatas removidas devem vir
+   do banco. Milhares separados por ponto.
+
+   Para cada tabela, abaixo da linha principal, mostra os nulos mantidos e
+   suas contagens, se houver. Exemplo:
+       nulos mantidos: telefone 8.645
+   No fim, uma linha com o total de linhas de entrada, saida e duplicatas.
+   stdout deve ser reconfigurado para utf-8.
+
+REEXECUCAO
+   Use CREATE OR REPLACE TABLE em refined, nunca append. Rodar dez vezes
+   deve produzir as mesmas tabelas, contagens e saida que rodar uma vez.
+
+ERRO
+   Antes de transformar qualquer tabela, verifica se as sete tabelas de
+   entrada existem em raw. Se faltar alguma, lista todas as ausentes, informa
+   que e preciso rodar "uv run python -m pipeline.ingestao" e encerra com
+   sys.exit(1), antes de gravar em refined.
+
+CRITERIOS DE ACEITE
+- Existem sete tabelas em refined, com todas as colunas mapeadas acima.
+- Com os dados atuais, contagens de entrada e saida:
+    clientes       26.000
+    devolucoes      8.000
+    itens_pedido  200.000
+    pagamentos     90.000
+    pedidos        90.000
+    produtos        1.500
+    remessas        83.885
+    TOTAL          499.385
+  As contagens de entrada e saida sao iguais; duplicatas removidas: zero.
+- DESCRIBE confirma DATE, TIMESTAMP, DECIMAL, INTEGER e BOOLEAN nos campos
+  especificados; todos os demais campos continuam VARCHAR.
+- Nulos depois = nulos antes, coluna por coluna:
+    clientes.telefone 8.645
+    produtos.peso_kg 78
+    remessas.data_entrega 714
+- SUM de cada valor monetario em refined bate com a soma do valor
+  correspondente em raw convertido para DECIMAL(10,2), centavo por centavo.
+- Valores '0' e '1' de aceita_marketing e ativo convertem para FALSE e TRUE
+  sem inversao.
+- Rodar duas vezes seguidas imprime exatamente a mesma coisa.
+- Se alguma tabela raw estiver ausente, nenhuma tabela refined e gravada.
+- Se uma conversao falhar, o erro identifica a tabela, a coluna e um valor
+  de exemplo, e o processo termina com codigo 1.
+
+DECISOES REGISTRADAS
+- A etapa inclui as sete tabelas, pois nao foi indicada nenhuma exclusao.
+- Os nomes de coluna sao traduzidos para portugues e preservam o vocabulario
+  usado nos nomes das tabelas raw.
+- Os campos 0/1 semanticamente binarios sao BOOLEAN; os campos de peso,
+  dinheiro e datas seguem os tipos acima, com base nos valores observados.
+- As chaves sao os IDs unicos medidos no banco atual; nao se cria constraint
+  de chave estrangeira nesta etapa.
