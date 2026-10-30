@@ -4,4 +4,3 @@ __pycache__/
 .ruff_cache/
 ecommerce.duckdb
 ecommerce.duckdb.wal
-raw/
