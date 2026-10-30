@@ -2,7 +2,7 @@
 
 Pipeline de dados em Python sobre um dataset sintético de comércio eletrônico, com DuckDB como banco. Projeto da pós-graduação: replica, com outro dataset, as etapas do projeto original feito sobre a base da Olist ([pipeline-olist](https://github.com/ckoliveiraa/pipeline-olist)).
 
-O desenvolvimento segue *spec-driven development*: a spec (`Spec.txt`) é a fonte da verdade e o código é consequência dela.
+O desenvolvimento segue *spec-driven development*: `Spec.txt` especifica o projeto e a ingestão; `Spec_etapa_2.txt` especifica a transformação para `refined`.
 
 ## Stack
 
@@ -17,10 +17,12 @@ O desenvolvimento segue *spec-driven development*: a spec (`Spec.txt`) é a font
 .
 ├── pipeline/
 │   ├── db.py          # conexão com o DuckDB (usada por todas as etapas)
-│   └── ingestao.py    # etapa 1: ingestão para o schema raw
+│   ├── ingestao.py    # etapa 1: ingestão para o schema raw
+│   └── transformacao.py # etapa 2: conversões e regras para refined
 ├── raw/               # os sete CSVs do dataset
 ├── ui.py              # abre a interface web do DuckDB
 ├── Spec.txt           # especificação do projeto
+├── Spec_etapa_2.txt   # especificação da transformação para refined
 ├── pyproject.toml
 └── uv.lock
 ```
@@ -45,6 +47,14 @@ uv run python -m pipeline.ingestao
 
 A saída é uma linha por tabela, com a contagem de linhas lida do banco, e uma linha final com o total.
 
+**Transformação** (converte tipos e nomes de coluna de `raw` para `refined`):
+
+```
+uv run python -m pipeline.transformacao
+```
+
+Uma linha por tabela mostra as contagens antes/depois e as duplicatas removidas; colunas com nulos mostram a quantidade mantida.
+
 **Interface web do DuckDB** (abre o navegador em http://localhost:4213):
 
 ```
@@ -58,7 +68,7 @@ Encerre com `Ctrl+C`. Com a interface aberta, a ingestão falha com "Could not s
 | Etapa | Descrição | Status |
 |-------|-----------|--------|
 | 1 | Ingestão: CSVs para o schema `raw`, sem nenhuma transformação | concluída (tag `etapa-1`) |
-| 2 | Refined: conversões de tipo e correções, como decisões registradas | a fazer |
+| 2 | Refined: conversões de tipo e nomes de coluna conforme a spec | implementada |
 | 3 | (preencher) | a fazer |
 | 4 | (preencher) | a fazer |
 
