@@ -2,12 +2,13 @@
 
 Pipeline de dados em Python sobre um dataset sintético de comércio eletrônico, com DuckDB como banco. Projeto da Aceleração Emprega Dados - Engenheiro de Dados.
 
-O desenvolvimento segue *spec-driven development*: `Spec.txt` especifica o projeto e a ingestão; `Spec_etapa_2.txt` especifica a transformação para `refined`.
+O desenvolvimento segue *spec-driven development*: `Specs/Spec.txt` especifica o projeto e a ingestão; `Specs/Spec_etapa_2.txt` especifica a transformação para `refined`; `Specs/Spec_painel.txt` especifica os painéis; `Specs/Spec_etapa_5.txt` especifica os testes automatizados.
 
 ## Stack
 
 - Python 3.12 ou superior, dependências gerenciadas com [uv](https://docs.astral.sh/uv/)
 - pandas para ler os CSVs
+- Streamlit e Plotly para o painel analítico
 - DuckDB (fixado em 1.5.6) como banco, no arquivo `ecommerce.duckdb`
 - Sem orquestrador: scripts executados pela linha de comando
 
@@ -19,12 +20,19 @@ O desenvolvimento segue *spec-driven development*: `Spec.txt` especifica o proje
 │   ├── db.py          # conexão com o DuckDB (usada por todas as etapas)
 │   ├── ingestao.py    # etapa 1: ingestão para o schema raw
 │   ├── transformacao.py # etapa 2: conversões e regras para refined
-│   └── marts.py       # materializa os marts a partir dos arquivos SQL
+│   ├── marts.py       # materializa os marts a partir dos arquivos SQL
+│   └── painel_html.py # gera o painel HTML estático
 ├── raw/               # os sete CSVs do dataset
 ├── marts/             # dez consultas SQL que materializam tabelas analíticas
+├── painel.py          # leitura somente leitura, formatação e gráficos
+├── app.py             # aplicação Streamlit
+├── dashboard.html     # snapshot estático e independente do painel
 ├── ui.py              # abre a interface web do DuckDB
-├── Spec.txt           # especificação do projeto
-├── Spec_etapa_2.txt   # especificação da transformação para refined
+├── Specs/
+│   ├── Spec.txt       # especificação do projeto
+│   ├── Spec_etapa_2.txt # especificação da transformação para refined
+│   ├── Spec_painel.txt # especificação do painel Streamlit
+│   └── Spec_etapa_5.txt # especificação dos testes automatizados
 ├── pyproject.toml
 └── uv.lock
 ```
@@ -65,6 +73,26 @@ uv run python -m pipeline.marts
 
 Execute a transformação antes de materializar os marts. Cada arquivo em `marts/` corresponde a uma tabela analítica; a execução usa uma transação e substitui os resultados anteriores.
 
+**Painel analítico** (visualiza os dez marts no navegador):
+
+```
+uv run streamlit run app.py
+```
+
+O painel apresenta indicadores do mês mais recente e gráficos de vendas, produtos, devoluções, pagamentos, entregas, descontos, recorrência, margem estimada e status de pedidos. O filtro de período afeta somente o gráfico mensal; o seletor de país afeta somente o gráfico de recorrência. A leitura é somente leitura e a conexão ao banco fecha após carregar os dados, então os marts podem ser recriados com o painel aberto. Use **Recarregar dados** para limpar o cache e ler as tabelas novamente.
+
+**Painel HTML estático** (abre diretamente no navegador):
+
+```
+dashboard.html
+```
+
+O arquivo é independente, inclui os gráficos interativos e funciona sem servidor ou conexão ao banco. Ele representa um snapshot dos marts no momento da geração; os filtros de mês e país funcionam no navegador, mas os dados não se atualizam automaticamente. Para atualizar o arquivo depois de recriar os marts:
+
+```
+uv run python -m pipeline.painel_html
+```
+
 **Interface web do DuckDB** (abre o navegador em http://localhost:4213):
 
 ```
@@ -80,7 +108,8 @@ Encerre com `Ctrl+C`. Com a interface aberta, a ingestão falha com "Could not s
 | 1 | Ingestão: CSVs para o schema `raw`, sem nenhuma transformação | concluída (tag `etapa-1`) |
 | 2 | Refined: conversões de tipo e nomes de coluna conforme a spec | implementada |
 | 3 | Marts: consultas analíticas materializadas no schema `marts` | implementada |
-| 4 | (preencher) | a fazer |
+| 4 | Painéis Streamlit e HTML estático: visualização dos marts | implementada |
+| 5 | Testes automatizados do pipeline, marts e painéis | em implementação |
 
 ### Etapa 1: ingestão
 
@@ -145,6 +174,24 @@ As consultas respondem a perguntas sobre vendas mensais, produtos mais vendidos,
 | `status_pedido_pagamento.sql` | `marts.status_pedido_pagamento` | Como status de captura, falha ou estorno se relacionam com pedidos? |
 
 Todos os valores de vendas usam a moeda registrada nos pedidos (atualmente USD). O mart de vendas mensais inclui uma métrica de pedidos entregues (`vendas_entregues`) separada do total registrado em todos os status (`valor_pedido_registrado`). O mart de devoluções distingue solicitações de itens efetivamente reembolsados. A margem é estimada com o custo atual do produto e não deduz frete, impostos, descontos alocados ou reembolsos.
+
+### Etapa 4: painel Streamlit
+
+O painel lê as dez tabelas do schema `marts` sem recalcular métricas em Python. Os gráficos usam os valores e agregações definidos nos arquivos SQL; valores monetários são identificados em USD e a margem por produto é apresentada como estimativa. Para abrir a aplicação:
+
+```
+uv run streamlit run app.py
+```
+
+O controle mensal filtra somente o gráfico de vendas entregues, pois os demais marts não têm uma dimensão mensal. O seletor de país filtra somente o gráfico de recorrência. O cache pode ser atualizado pelo botão **Recarregar dados**. O painel abre o DuckDB em modo somente leitura e fecha a conexão após a leitura; assim, `uv run python -m pipeline.marts` pode recriar as tabelas enquanto a aplicação está aberta.
+
+### Etapa 5: testes automatizados
+
+Os testes usam apenas CSVs e bancos DuckDB temporários, com dados sintéticos; não dependem de `ecommerce.duckdb` nem dos CSVs de `raw/`. A cobertura é medida no código de `pipeline/` e em `painel.py`; os aplicativos Streamlit e DuckDB são verificados manualmente. Para executar a suite e ver a cobertura:
+
+```
+uv run pytest --cov
+```
 
 ## Decisões técnicas
 

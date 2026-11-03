@@ -1,0 +1,223 @@
+SPEC DO PAINEL — VISUALIZACAO DOS MARTS
+
+CONTEXTO
+Estou construindo um pipeline de dados em Python sobre um dataset sintetico
+de comercio eletronico. Trabalho com spec-driven development: esta spec e a
+fonte da verdade e o codigo e consequencia dela. Nao acrescente requisitos
+que nao estejam escritos aqui. Se algo estiver ambiguo, pergunte antes de
+escrever codigo.
+
+Esta spec define somente o painel. As etapas de ingestao, transformacao e
+materializacao dos marts ja existem e nao devem ser reimplementadas nem
+alteradas pelo painel.
+
+STACK
+- Python 3.12 ou superior, dependencias gerenciadas com uv
+- DuckDB 1.5.6, banco ecommerce.duckdb na raiz do projeto
+- Streamlit e Plotly (plotly.express), ja declarados nas dependencias
+- Nenhum orquestrador
+
+O QUE JA EXISTE (use, nao reimplemente)
+pipeline/db.py localiza ecommerce.duckdb na raiz do projeto e expoe
+conectar(), que abre uma conexao DuckDB em modo de escrita.
+
+pipeline/marts.py cria as tabelas abaixo no schema marts. Os arquivos SQL
+definem as metricas e ja agregam os dados; o painel nao deve recalcula-las:
+  vendas_mensais
+  produtos_mais_vendidos
+  devolucoes_por_categoria
+  vendas_por_pais
+  pagamentos_por_metodo
+  entregas_por_transportadora
+  descontos_por_canal
+  recorrencia_clientes
+  margem_estimada_produto
+  status_pedido_pagamento
+
+Os valores monetarios do dataset estao em USD. A receita de
+vendas_entregues em vendas_mensais e distinta de valor_pedido_registrado,
+que considera pedidos de todos os status. O mart de margem e uma estimativa
+com o custo atual do produto; nao deduz frete, impostos, descontos
+alocados ou reembolsos.
+
+ARTEFATOS A PRODUZIR
+painel.py, na raiz: leitura dos marts, formatacao e funcoes de graficos.
+app.py, na raiz: montagem da pagina Streamlit. Executavel com:
+  uv run streamlit run app.py
+pipeline/painel_html.py: gera dashboard.html, um snapshot independente.
+dashboard.html, na raiz: pagina interativa que abre diretamente no
+navegador e so muda seus dados quando for gerada novamente.
+
+SPEC
+
+1. LEITURA (painel.py)
+   ler(nomes_marts) -> dict[str, DataFrame]. Para cada nome solicitado,
+   executa somente:
+     SELECT * FROM marts.<nome>
+
+   Os nomes aceitos sao os dez marts listados nesta spec. Nenhuma outra
+   consulta SQL e permitida: a regra de negocio e a agregacao pertencem aos
+   arquivos SQL, nao ao painel.
+
+   A conexao e aberta com duckdb.connect(caminho, read_only=True), usando
+   ecommerce.duckdb na raiz do projeto, e fechada dentro de ler(), inclusive
+   em caso de erro. O caminho e resolvido a partir da localizacao do codigo,
+   nao do diretorio corrente. Motivo: o painel deve sempre ler o mesmo
+   banco do pipeline e nao deve manter o arquivo bloqueado enquanto a
+   pagina estiver aberta.
+
+2. NENHUM CALCULO
+   Proibido em painel.py e app.py: groupby, sum, mean, count, merge, pivot,
+   melt e qualquer calculo entre colunas. Nenhuma metrica de negocio pode
+   ser criada, recomposta ou agregada em Python.
+
+   Permitido: ordenar linhas, filtrar linhas, selecionar colunas, head(n),
+   renomear colunas para exibicao, formatar valores como texto e selecionar
+   uma linha ja calculada pelo mart.
+
+   Os graficos usam diretamente as colunas existentes nos marts. Motivo:
+   qualquer novo numero ou regra de negocio deve ser definido em SQL antes
+   de chegar ao painel. Se algum indicador necessario nao existir, nao o
+   estime: informe qual coluna ou mart esta faltando.
+
+3. LAYOUT (app.py), DE CIMA PARA BAIXO, layout="wide"
+   Cabecalho: titulo "E-commerce sintetico · visao da operacao" a esquerda.
+   A direita, filtro de periodo (secao 5) e botao "Recarregar dados".
+
+   Faixa 1: cinco cartoes st.metric, nesta ordem:
+     Receita entregue · ultimo mes disponivel
+       vendas_mensais.vendas_entregues da linha de mes mais recente
+     Pedidos entregues · ultimo mes disponivel
+       vendas_mensais.pedidos_entregues da mesma linha
+     Ticket medio · ultimo mes disponivel
+       vendas_mensais.ticket_entregue da mesma linha
+     Produto lider · unidades entregues
+       nome_produto e unidades_entregues da primeira linha de
+       produtos_mais_vendidos
+     Pais lider · vendas entregues
+       pais e valor_vendido da primeira linha de vendas_por_pais
+
+   Os tres primeiros cartoes sao explicitamente referentes ao mes mais
+   recente, nao ao periodo selecionado no filtro. Os dois ultimos mostram
+   a primeira linha dos respectivos marts, que ja vem ordenada pela metrica
+   de lideranca. Nao apresentar esses cinco valores como totais gerais do
+   periodo.
+
+   Faixa 2, largura inteira:
+     "01 · Vendas entregues por mes": linha com marcadores, mes no eixo X e
+     vendas_entregues em USD no eixo Y.
+
+   Faixa 3, tres colunas iguais:
+     "02 · Produtos mais vendidos": barras horizontais de
+     unidades_entregues por nome_produto, em ordem decrescente.
+     "04 · Vendas por pais": barras horizontais de valor_vendido em USD,
+     em ordem decrescente.
+     "05 · Mix de pagamentos": barras de valor_pagamentos em USD por
+     metodo, coloridas por status_pagamento e separadas por canal.
+
+   Faixa 4, tres colunas iguais:
+     "03 · Solicitacoes e reembolsos por categoria": barras horizontais
+     agrupadas para pct_itens_com_solicitacao e pct_itens_reembolsados.
+     "06 · Prazo e taxa de entrega por transportadora": grafico de
+     dispersao, media_dias_envio_entrega no eixo X e pct_entregues no eixo
+     Y, com um ponto identificado por transportadora. Cada eixo tem sua
+     propria unidade.
+     "07 · Descontos por canal": pct_desconto_ponderado por canal, com
+     status_pedido como cor.
+
+   Faixa 5, tres colunas iguais:
+     "08 · Recorrencia por pais e fidelidade": pct_recorrentes por
+     nivel_fidelidade. Incluir um seletor local a este grafico para pais;
+     a selecao apenas filtra as linhas de recorrencia_clientes e nao altera
+     os demais componentes.
+     "09 · Margem estimada por produto": barras horizontais de
+     margem_bruta_estimada em USD por nome_produto, na ordem que o mart ja
+     fornece. O titulo ou subtitulo deve identificar a margem como
+     estimada.
+     "10 · Status de pedidos e pagamentos": quantidade de pedidos com
+     captura, falha, estorno e sem pagamento por status_pedido; separar os
+     dados por canal.
+
+   Cada grafico tem titulo com seu numero de mart, eixo identificado com a
+   unidade, uma cor principal consistente e width="stretch". Percentuais
+   usam a escala ja retornada pelos marts (0 a 100); nao multiplicar nem
+   recalcular valores para exibi-los.
+
+4. FORMATACAO (painel.py)
+   Funcoes puras, sem Streamlit e sem acesso ao banco:
+     moeda_usd(valor, casas=2) -> "US$ 1.003.862,14"
+     pct(valor, casas=1)      -> "93,2%"
+     numero(valor, casas=0)   -> "96.470"
+
+   Milhar com ponto e casas decimais com virgula, sempre, sem depender do
+   locale do sistema. Datas dos graficos devem ser exibidas em formato
+   legivel em portugues, sem depender do locale da maquina.
+
+   Deve existir uma funcao por grafico, recebendo o DataFrame daquele mart
+   e devolvendo uma figura Plotly. A funcao do grafico de recorrencia pode
+   receber tambem o pais selecionado. Motivo: manter a apresentacao
+   testavel e permitir reutilizar as figuras sem importar Streamlit.
+
+5. FILTROS
+   O grafico de vendas mensais tem um st.select_slider baseado nos valores
+   distintos de mes em vendas_mensais. O padrao seleciona o periodo inteiro
+   disponivel. O filtro recorta somente as linhas desse grafico.
+
+   Os cartoes e os outros graficos nao mudam com o periodo selecionado:
+   os demais marts nao possuem coluna de mes e o painel nao deve inventar
+   uma associacao temporal. Abaixo do filtro, exibir:
+     "O filtro altera somente o grafico de vendas mensais."
+
+   O seletor de pais de recorrencia afeta somente o grafico de
+   recorrencia. Nenhum filtro deve alterar outros componentes.
+
+6. CACHE E ERROS
+   A leitura dos marts usa st.cache_data no app.py. O botao "Recarregar
+   dados" limpa esse cache e provoca nova leitura.
+
+   Se ecommerce.duckdb nao existir, ou se faltar qualquer um dos dez marts
+   desta spec, mostrar st.error com a causa e o comando:
+     uv run python -m pipeline.marts
+   Em seguida, chamar st.stop(). Nao substituir a falha por DataFrames
+   vazios nem apresentar uma pagina com sucesso parcial.
+
+   A conexao DuckDB nao fica aberta entre renderizacoes. Motivo: o pipeline
+   precisa conseguir substituir os marts enquanto o painel nao esta lendo.
+
+CRITERIOS DE ACEITE
+- O painel abre com uv run streamlit run app.py e le os dez marts do
+  ecommerce.duckdb em modo somente leitura.
+- O periodo completo do grafico mensal mostra as 33 linhas existentes em
+  vendas_mensais; o controle inicia com todos os meses selecionados.
+- Alterar o filtro de mes muda somente o grafico mensal; os cinco
+  cartoes e os outros nove graficos permanecem iguais.
+- Alterar o pais no grafico de recorrencia muda somente esse grafico.
+- Os cartoes mostram os valores das linhas indicadas na secao 3, sem
+  recalcular indicadores. Receita, ticket e margem sao identificados em USD.
+- O grafico de pagamento distingue metodo, status de pagamento e canal; o
+  de status distingue status do pedido e canal.
+- Uma busca por "groupby", ".sum(", ".mean(", ".count(", "merge(", "pivot"
+  e "melt(" em painel.py e app.py nao encontra operacoes de calculo.
+- Se o banco ou um mart estiver ausente, a pagina informa o erro e o
+  comando de materializacao, e nao mostra graficos parciais.
+- Com o painel aberto, uv run python -m pipeline.marts consegue recriar os
+  dez marts sem erro de lock.
+
+ENTREGA
+1. A spec como docstring no topo de painel.py, com o motivo de cada regra.
+2. O codigo, comentado somente onde a decisao nao for obvia pelo codigo.
+3. Uma lista final de suposicoes que nao estavam definidas nesta spec.
+
+SUPOSICOES DESTA PROPOSTA PARA REVISAO
+- Nao foi fornecido um rascunho visual; por isso, a pagina usa cinco
+  cartoes e exibe os dez marts em cinco faixas, com tres graficos por faixa
+  nas tres ultimas.
+- Nao existe um mart de KPIs gerais. Os cartoes usam valores de uma unica
+  linha do mart mensal mais recente e os registros lideres dos marts de
+  produtos e paises; nao representam totais do periodo.
+- Como somente vendas_mensais tem dimensao de mes, o filtro temporal afeta
+  somente esse grafico. O seletor de pais afeta somente recorrencia.
+- O HTML e um snapshot dos marts no momento da geracao, inclui os recursos
+  dos graficos e nao precisa de servidor nem acesso ao banco para abrir.
+- A atualizacao do HTML e feita pelo comando:
+    uv run python -m pipeline.painel_html
