@@ -1,0 +1,287 @@
+SPEC DA ETAPA DE TESTES AUTOMATIZADOS
+
+CONTEXTO
+Estou construindo um pipeline de dados em Python sobre um dataset sintetico
+de comercio eletronico. Trabalho com spec-driven development: as specs das
+etapas e as docstrings dos modulos sao a fonte da verdade. Nao acrescente
+regras de negocio que nao estejam escritas. Se uma regra estiver ambigua,
+pergunte antes de escrever os testes.
+
+Esta etapa testa o comportamento do codigo existente. Nao reimplementa
+ingestao, transformacao, marts ou paineis.
+
+STACK
+- Python 3.12 ou superior, conforme pyproject.toml
+- Dependencias gerenciadas com uv
+- DuckDB 1.5.6
+- pytest e pytest-cov, ja declarados nas dependencias de desenvolvimento
+
+O QUE JA EXISTE (use, nao reimplemente)
+Modulos Python:
+  pipeline/db.py
+  pipeline/ingestao.py
+  pipeline/transformacao.py
+  pipeline/marts.py
+  pipeline/painel_html.py
+  painel.py
+  app.py
+  ui.py
+
+Consultas SQL:
+  marts/vendas_mensais.sql
+  marts/produtos_mais_vendidos.sql
+  marts/devolucoes_por_categoria.sql
+  marts/vendas_por_pais.sql
+  marts/pagamentos_por_metodo.sql
+  marts/entregas_por_transportadora.sql
+  marts/descontos_por_canal.sql
+  marts/recorrencia_clientes.sql
+  marts/margem_estimada_produto.sql
+  marts/status_pedido_pagamento.sql
+
+As regras e criterios ja documentados em pipeline/db.py,
+pipeline/ingestao.py, pipeline/transformacao.py, painel.py e nas specs
+Spec.txt, Spec_etapa_2.txt e Spec_painel.txt sao a lista inicial de
+comportamentos a testar.
+
+Nao existe relatorio.py nem sql/marts/. O gerador do painel HTML e
+pipeline/painel_html.py, e os arquivos SQL ficam em marts/. Nao criar
+modulos ou consultas ficticios apenas para espelhar o modelo desta spec.
+
+ARTEFATOS A PRODUZIR
+Pasta test/ na raiz, com um arquivo por modulo Python testavel:
+  test_db.py
+  test_ingestao.py
+  test_transformacao.py
+  test_marts.py
+  test_painel.py
+  test_painel_html.py
+
+Configuracao de testes e coverage em pyproject.toml. Execucao:
+  uv run pytest --cov
+
+SPEC
+
+1. META DE COVERAGE
+   A meta e no minimo 60% de coverage de linhas no conjunto do codigo
+   Python de pipeline/ e painel.py. Isso inclui pipeline/painel_html.py.
+   A meta e global, nao uma meta independente por arquivo.
+
+   app.py e ui.py ficam fora da medicao. O app.py e conferido visualmente
+   no navegador; ui.py somente inicia a interface do DuckDB. O HTML gerado
+   e um artefato, nao codigo Python medido.
+
+   Configuracao:
+     [tool.pytest.ini_options]
+     testpaths = ["test"]
+     pythonpath = ["."]
+
+     [tool.coverage.run]
+     source = ["."]
+     omit = ["test/*", "app.py", "ui.py", ".venv/*"]
+
+     [tool.coverage.report]
+     fail_under = 60
+     show_missing = true
+
+   source = ["."] e necessario para que um modulo de producao sem testes
+   conte como 0%, em vez de desaparecer do denominador por nao ter sido
+   importado.
+
+2. NUNCA O BANCO NEM OS DADOS DO PROJETO
+   Nenhum teste abre ecommerce.duckdb nem le arquivos de raw/. Cada teste
+   que precisa de banco usa tmp_path e um arquivo DuckDB criado pelo proprio
+   teste. DuckDB e real; nao usar mock para substituir o banco.
+
+   Quando o codigo usa caminhos fixos, redirecione-os para tmp_path com
+   monkeypatch. Para testar pipeline.db.conectar(), ajuste __file__ do
+   modulo antes da chamada para que a conexao real crie o banco dentro de
+   tmp_path. Nos testes de outras etapas, monkeypatch em pipeline.db.conectar
+   deve devolver uma conexao DuckDB real no arquivo temporario.
+
+   CSVs de teste sao pequenos, sinteticos e escritos pelo proprio teste,
+   inclusive comprimidos como .csv.gz quando necessario. Redirecione
+   pipeline.db.PASTA_RAW para a pasta temporaria.
+
+   Fixtures de pytest permitidas: somente tmp_path e monkeypatch. Funcoes
+   auxiliares comuns podem criar tabelas e linhas sinteticas; nao usar
+   fixtures adicionais, banco real, dados reais ou resultados medidos no
+   dataset.
+
+   Motivo: a suite precisa rodar sem ingestao previa e nao pode criar,
+   alterar ou depender do banco ou dos CSVs de nenhuma pessoa.
+
+3. ENTRADAS INVENTADAS E EXPECTATIVAS
+   Toda entrada usada em asserts e criada dentro do teste. Cada linha
+   sintetica deve ter um comentario curto explicando o caso representado,
+   por exemplo: pedido entregue, pedido cancelado, dois itens do mesmo
+   pedido, campo nulo, linha duplicada ou chave conflitante.
+
+   O valor esperado e calculado a partir dessas poucas linhas e da regra
+   documentada. Nao copiar totais, taxas ou contagens do ecommerce.duckdb
+   nem dos CSVs de producao.
+
+   Estes sao testes unitarios das regras e integracoes locais entre os
+   modulos e um DuckDB temporario. Perfil, qualidade e reconciliacao do
+   dataset real ficam fora desta etapa.
+
+4. O QUE TESTAR
+   Os criterios das docstrings e das specs existentes sao o ponto de
+   partida. Cada regra observavel vira pelo menos um teste.
+
+   test_db.py
+   - Importar pipeline.db nao cria arquivo de banco.
+   - conectar() usa a raiz temporaria derivada da localizacao simulada do
+     modulo, nao o diretorio corrente.
+   - criar_schema() pode ser chamada repetidamente sem erro.
+   - gravar() grava DataFrame com colunas, tipos e NULL preservados, devolve
+     a contagem lida do banco e substitui a tabela na reexecucao.
+   - A gravacao nao deixa objetos temporarios no catalogo DuckDB.
+
+   test_ingestao.py
+   - Sete CSVs sinteticos sao carregados nas tabelas do mapa da etapa.
+   - Valores, cabecalhos e numero de linhas sao preservados; a reexecucao
+     substitui as tabelas em vez de acrescentar linhas.
+   - Arquivos ausentes encerram com SystemExit(1) antes de conectar ou
+     gravar qualquer tabela.
+   - A saida informa as contagens e o total calculados a partir dos CSVs
+     pequenos de teste.
+   - Valores textuais especiais so podem virar NULL conforme a regra
+     documentada em Spec.txt; verificar ao menos um texto especial e um
+     campo vazio.
+
+   test_transformacao.py
+   - Criar as sete tabelas raw minimas no DuckDB temporario com as colunas
+     exigidas pelo mapa.
+   - A transformacao renomeia as colunas e converte pelo menos uma coluna
+     de cada familia definida em TIPOS para DATE, TIMESTAMP, DECIMAL,
+     INTEGER e BOOLEAN, mantendo os campos nao convertidos como VARCHAR.
+   - Uma linha inteira duplicada fica uma vez; chave repetida com conteudo
+     diferente encerra com SystemExit(1) e informa a chave conflitante.
+   - Datas, valores monetarios e outros campos NULL de origem permanecem
+     NULL; raw nao e alterado.
+   - Tabela ou coluna de entrada ausente/inesperada encerra antes de
+     escrever refined.
+   - Valor invalido em conversao encerra com SystemExit(1), identifica
+     tabela e coluna e nao substitui NULL pelo erro.
+   - Uma falha durante a transacao nao deixa refined parcialmente
+     atualizado e preserva as tabelas refined anteriores.
+   - A segunda execucao produz as mesmas linhas da primeira.
+
+   test_marts.py
+   - Usar somente SQLs reais em marts/ e tabelas refined sinteticas no
+     DuckDB temporario.
+   - A execucao cria as dez tabelas do mapa MODELOS; a reexecucao substitui
+     os resultados, sem duplicar linhas.
+   - Tabela refined necessaria ou arquivo SQL ausente encerra com
+     SystemExit(1) e informa o que falta.
+   - Uma falha de SQL encerra com SystemExit(1), faz rollback e preserva
+     o estado anterior do schema marts.
+   - Testar regras das consultas com pequenas entradas inventadas:
+       marts/vendas_mensais.sql: pedidos entregues e cancelados no mesmo
+       mes. Conferir pedidos_total, pedidos_entregues,
+       valor_pedido_registrado e vendas_entregues; pedido cancelado nao
+       entra em vendas_entregues.
+       marts/produtos_mais_vendidos.sql: produto com mais de um item
+       entregue e uma linha associada a pedido cancelado. Conferir a soma
+       de unidades e a exclusao do item cancelado.
+       marts/devolucoes_por_categoria.sql: itens em categorias distintas,
+       uma solicitacao nao reembolsada e uma reembolsada. Conferir
+       solicitacoes, itens reembolsados, percentuais e valor reembolsado.
+   - Esperados devem ser calculados a partir somente das linhas sinteticas.
+
+   test_painel.py
+   - moeda_usd(), pct() e numero() usam entradas sinteticas e verificam
+     separadores de milhar/decimal e casas configuradas.
+   - rotular_mes() e verificado com datas inventadas sem depender do locale.
+   - ler() usa somente marts sinteticos no DuckDB temporario, retorna
+     DataFrames solicitados e fecha a conexao mesmo em caso de erro.
+   - Nome de mart nao permitido e mart ausente produzem o erro documentado.
+   - Cada funcao de grafico retorna uma figura Plotly; verificar os dados,
+     categorias e series correspondentes a cada DataFrame sintetico. Nao
+     exigir um numero de pontos igual ao numero de linhas quando o grafico
+     representa mais de uma serie por linha.
+
+   test_painel_html.py
+   - montar_html() usa DataFrames sinteticos para gerar os cinco indicadores,
+     os dez graficos, as opcoes mensais e o filtro de pais.
+   - O HTML contem Plotly incorporado e nao depende de scripts externos,
+     banco ou servidor para abrir.
+   - gerar(tmp_path / "dashboard.html") grava o arquivo no caminho
+     solicitado e usa somente os marts do banco DuckDB temporario.
+   - O filtro mensal atua no grafico mensal; o seletor de pais atua somente
+     na visualizacao de recorrencia.
+   - Nao exigir que duas geracoes sejam byte a byte identicas: o snapshot
+     inclui o horario de geracao. Conferir o conteudo funcional, nao esse
+     campo variavel.
+
+   app.py e ui.py ficam fora da coverage. Antes da entrega, conferir app.py
+   no navegador com os marts existentes: titulo, cinco cartoes, dez
+   graficos, filtro mensal e filtro de pais. O dashboard.html deve abrir
+   localmente e os dois filtros devem funcionar sem conexao ao banco.
+
+   Caminhos de erro que terminam com sys.exit devem ser verificados com
+   pytest.raises(SystemExit), confirmando o codigo 1 quando fizer parte da
+   regra.
+
+5. ESTILO
+   pytest puro: funcoes test_* com asserts que comprovem comportamento.
+   Nomes de teste descrevem a regra em snake_case, por exemplo:
+     test_pedido_cancelado_fica_fora_de_vendas_entregues
+
+   Proibido: testes sem assert, skip, xfail, try/except ao redor do assert,
+   pytest.approx para dinheiro ou dependencias de arquivos/banco reais.
+   Valores DECIMAL devem ser comparados exatamente.
+
+   Motivo: cada teste deve provar uma regra reproduzivel, nao apenas
+   aumentar coverage.
+
+6. AJUSTE PONTUAL PARA CUMPRIR A SPEC
+   A regra da Spec.txt para ingestao e explicita: somente campo vazio vira
+   NULL; textos NA, N/A, NULL, None e nan continuam texto. O codigo atual
+   usa keep_default_na=True, que contradiz essa regra. Altere somente a
+   chamada de pandas.read_csv para keep_default_na=False e na_values=[""] e
+   cubra os cinco textos e o campo vazio com CSV sintetico.
+   Motivo: preservar o contrato ja definido para raw e evitar transformar
+   categorias ou identificadores textuais em nulos.
+
+   Nao altere o comportamento de pipeline/marts.py por causa dos criterios
+   do modelo Olist:
+   - Uma consulta SQL pode legitimamente retornar zero linhas, por exemplo
+     quando nao existem fatos que atendam ao filtro. O executor deve
+     materializar e informar a tabela vazia, sem inventar uma regra que
+     considere qualquer resultado vazio um erro.
+   - Se um arquivo SQL esta ausente, o executor valida isso antes de abrir o
+     banco e encerra com SystemExit(1). Nao apague a tabela anteriormente
+     materializada: sua definicao ausente nao autoriza uma operacao
+     destrutiva. Teste que a falha ocorre antes da conexao e preserva o
+     estado do banco.
+
+   Nenhuma outra alteracao em codigo de producao faz parte desta etapa. Se
+   um teste indicar outra divergencia, nao amplie o escopo em silencio:
+   relate-a para decisao.
+
+CRITERIOS DE ACEITE
+- uv run pytest --cov termina sem falha e mostra TOTAL de pelo menos 60%.
+- O relatorio lista coverage e linhas Missing por arquivo de producao.
+- A suite passa em um checkout sem ecommerce.duckdb nem CSVs em raw/; nao
+  deve ser necessario renomear ou remover arquivos reais de ninguem.
+- Duas execucoes seguidas terminam com os mesmos resultados de testes e
+  coverage; nao comparar tempos de execucao.
+- Busca por totais ou valores medidos do dataset real dentro de test/ nao
+  encontra dependencias desses resultados.
+- Testes usam exclusivamente bancos e dados sinteticos em tmp_path.
+- As alteracoes intencionais desta etapa sao testes em test/, config de
+  pytest/coverage em pyproject.toml, a correcao keep_default_na em
+  pipeline/ingestao.py, a atualizacao do README e esta spec renomeada.
+
+ENTREGA
+1. Os arquivos de teste.
+2. A saida de uv run pytest --cov, com a tabela por arquivo.
+3. Os arquivos e linhas Missing e por que ficaram sem teste nesta etapa.
+4. Divergencias preexistentes que impedirem algum teste sem mudar codigo.
+5. Uma lista final de suposicoes que nao estavam definidas nesta spec.
+
+NUMERACAO
+A etapa de testes e a Etapa 5. A Etapa 4 permanece sendo os paineis
+Streamlit e HTML estatico.

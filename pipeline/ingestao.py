@@ -57,7 +57,13 @@ def main() -> None:
 
         for nome_arquivo, nome_tabela in MAPA_TABELAS.items():
             caminho = db.PASTA_RAW / nome_arquivo
-            df = pd.read_csv(caminho, encoding="utf-8", dtype=str, keep_default_na=True)
+            df = pd.read_csv(
+                caminho,
+                encoding="utf-8",
+                dtype=str,
+                keep_default_na=False,
+                na_values=[""],
+            )
             contagem = db.gravar(con, df, "raw", nome_tabela)
             print(f"raw.{nome_tabela}: {_formatar_numero(contagem)}")
             total += contagem

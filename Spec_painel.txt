@@ -44,6 +44,9 @@ ARTEFATOS A PRODUZIR
 painel.py, na raiz: leitura dos marts, formatacao e funcoes de graficos.
 app.py, na raiz: montagem da pagina Streamlit. Executavel com:
   uv run streamlit run app.py
+pipeline/painel_html.py: gera dashboard.html, um snapshot independente.
+dashboard.html, na raiz: pagina interativa que abre diretamente no
+navegador e so muda seus dados quando for gerada novamente.
 
 SPEC
 
@@ -214,3 +217,7 @@ SUPOSICOES DESTA PROPOSTA PARA REVISAO
   produtos e paises; nao representam totais do periodo.
 - Como somente vendas_mensais tem dimensao de mes, o filtro temporal afeta
   somente esse grafico. O seletor de pais afeta somente recorrencia.
+- O HTML e um snapshot dos marts no momento da geracao, inclui os recursos
+  dos graficos e nao precisa de servidor nem acesso ao banco para abrir.
+- A atualizacao do HTML e feita pelo comando:
+    uv run python -m pipeline.painel_html
