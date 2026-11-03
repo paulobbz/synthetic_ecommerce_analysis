@@ -2,7 +2,7 @@
 
 Pipeline de dados em Python sobre um dataset sintético de comércio eletrônico, com DuckDB como banco. Projeto da Aceleração Emprega Dados - Engenheiro de Dados.
 
-O desenvolvimento segue *spec-driven development*: `Spec.txt` especifica o projeto e a ingestão; `Spec_etapa_2.txt` especifica a transformação para `refined`; `Spec_painel.txt` especifica os painéis; `Spec_etapa_5.txt` especifica os testes automatizados.
+O desenvolvimento segue *spec-driven development*: `Specs/Spec.txt` especifica o projeto e a ingestão; `Specs/Spec_etapa_2.txt` especifica a transformação para `refined`; `Specs/Spec_painel.txt` especifica os painéis; `Specs/Spec_etapa_5.txt` especifica os testes automatizados.
 
 ## Stack
 
@@ -28,10 +28,11 @@ O desenvolvimento segue *spec-driven development*: `Spec.txt` especifica o proje
 ├── app.py             # aplicação Streamlit
 ├── dashboard.html     # snapshot estático e independente do painel
 ├── ui.py              # abre a interface web do DuckDB
-├── Spec.txt           # especificação do projeto
-├── Spec_etapa_2.txt   # especificação da transformação para refined
-├── Spec_painel.txt    # especificação do painel Streamlit
-├── Spec_etapa_5.txt   # especificação dos testes automatizados
+├── Specs/
+│   ├── Spec.txt       # especificação do projeto
+│   ├── Spec_etapa_2.txt # especificação da transformação para refined
+│   ├── Spec_painel.txt # especificação do painel Streamlit
+│   └── Spec_etapa_5.txt # especificação dos testes automatizados
 ├── pyproject.toml
 └── uv.lock
 ```

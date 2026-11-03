@@ -5,8 +5,8 @@ refined, sem jamais alterar raw. A separacao preserva a fonte original para
 auditoria e permite que as etapas seguintes trabalhem com nomes e tipos
 explicitos.
 
-Cada coluna recebe o nome definido em Spec_etapa_2.txt; nenhuma coluna e
-descartada. Identificadores, categorias e demais atributos permanecem texto
+Cada coluna recebe o nome definido em Specs/Spec_etapa_2.txt; nenhuma coluna
+e descartada. Identificadores, categorias e demais atributos permanecem texto
 porque nao sao medidas. Datas, valores monetarios, quantidades, peso e flags
 sao convertidos no DuckDB para que datas e dinheiro tenham tipos adequados,
 sem copiar tabelas para a memoria Python.

@@ -7,7 +7,7 @@ fonte da verdade e o codigo e consequencia dela. Nao acrescente requisito
 que nao esteja escrito aqui. Se algo estiver ambiguo, pergunte antes de
 escrever codigo.
 
-Esta spec complementa Spec.txt: a etapa 1 ja materializa os CSVs em raw e
+Esta spec complementa Specs/Spec.txt: a etapa 1 ja materializa os CSVs em raw e
 nao deve ser alterada por esta etapa.
 
 STACK

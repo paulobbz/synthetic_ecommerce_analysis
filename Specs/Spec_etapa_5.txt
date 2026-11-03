@@ -41,7 +41,7 @@ Consultas SQL:
 
 As regras e criterios ja documentados em pipeline/db.py,
 pipeline/ingestao.py, pipeline/transformacao.py, painel.py e nas specs
-Spec.txt, Spec_etapa_2.txt e Spec_painel.txt sao a lista inicial de
+Specs/Spec.txt, Specs/Spec_etapa_2.txt e Specs/Spec_painel.txt sao a lista inicial de
 comportamentos a testar.
 
 Nao existe relatorio.py nem sql/marts/. O gerador do painel HTML e
@@ -147,7 +147,7 @@ SPEC
    - A saida informa as contagens e o total calculados a partir dos CSVs
      pequenos de teste.
    - Valores textuais especiais so podem virar NULL conforme a regra
-     documentada em Spec.txt; verificar ao menos um texto especial e um
+     documentada em Specs/Spec.txt; verificar ao menos um texto especial e um
      campo vazio.
 
    test_transformacao.py
@@ -237,7 +237,7 @@ SPEC
    aumentar coverage.
 
 6. AJUSTE PONTUAL PARA CUMPRIR A SPEC
-   A regra da Spec.txt para ingestao e explicita: somente campo vazio vira
+   A regra da Specs/Spec.txt para ingestao e explicita: somente campo vazio vira
    NULL; textos NA, N/A, NULL, None e nan continuam texto. O codigo atual
    usa keep_default_na=True, que contradiz essa regra. Altere somente a
    chamada de pandas.read_csv para keep_default_na=False e na_values=[""] e
