@@ -175,11 +175,15 @@ SPEC
    A leitura dos marts usa st.cache_data no app.py. O botao "Recarregar
    dados" limpa esse cache e provoca nova leitura.
 
-   Se ecommerce.duckdb nao existir, ou se faltar qualquer um dos dez marts
-   desta spec, mostrar st.error com a causa e o comando:
-     uv run python -m pipeline.marts
-   Em seguida, chamar st.stop(). Nao substituir a falha por DataFrames
-   vazios nem apresentar uma pagina com sucesso parcial.
+   Se ecommerce.duckdb nao existir ou faltar algum dos dez marts, executar
+   os modulos existentes de ingestao, transformacao e marts, nessa ordem,
+   para preparar o banco a partir dos CSVs em raw/. Motivo: plataformas de
+   deploy recebem o codigo e os CSVs versionados, mas o banco gerado e
+   ignorado pelo Git. O painel nao deve depender de um artefato local.
+   Mostrar st.spinner durante o preparo. Se qualquer etapa falhar, mostrar
+   st.error com a etapa e a saida do processo, e chamar st.stop(). Nao
+   apresentar uma pagina com sucesso parcial nem substituir falhas por
+   DataFrames vazios.
 
    A conexao DuckDB nao fica aberta entre renderizacoes. Motivo: o pipeline
    precisa conseguir substituir os marts enquanto o painel nao esta lendo.
@@ -198,8 +202,9 @@ CRITERIOS DE ACEITE
   de status distingue status do pedido e canal.
 - Uma busca por "groupby", ".sum(", ".mean(", ".count(", "merge(", "pivot"
   e "melt(" em painel.py e app.py nao encontra operacoes de calculo.
-- Se o banco ou um mart estiver ausente, a pagina informa o erro e o
-  comando de materializacao, e nao mostra graficos parciais.
+- Se o banco ou um mart estiver ausente, o painel prepara o banco a partir
+  dos CSVs; em caso de falha, identifica a etapa e nao mostra graficos
+  parciais.
 - Com o painel aberto, uv run python -m pipeline.marts consegue recriar os
   dez marts sem erro de lock.
 

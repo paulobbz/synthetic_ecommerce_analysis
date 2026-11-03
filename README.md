@@ -81,6 +81,8 @@ uv run streamlit run app.py
 
 O painel apresenta indicadores do mês mais recente e gráficos de vendas, produtos, devoluções, pagamentos, entregas, descontos, recorrência, margem estimada e status de pedidos. O filtro de período afeta somente o gráfico mensal; o seletor de país afeta somente o gráfico de recorrência. A leitura é somente leitura e a conexão ao banco fecha após carregar os dados, então os marts podem ser recriados com o painel aberto. Use **Recarregar dados** para limpar o cache e ler as tabelas novamente.
 
+**Deploy no Streamlit Community Cloud:** configure o repositório, o branch e `app.py` como arquivo principal. O banco `ecommerce.duckdb` não é versionado; se ele ou algum mart estiver ausente, o app gera os dados na primeira inicialização usando os CSVs versionados em `raw/`. Por isso, não é necessário enviar o arquivo DuckDB ao GitHub.
+
 **Painel HTML estático** (abre diretamente no navegador):
 
 ```

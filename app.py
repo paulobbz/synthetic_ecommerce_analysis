@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+
 import duckdb
 import pandas as pd
 import streamlit as st
@@ -15,6 +18,59 @@ def _ler_marts() -> dict[str, pd.DataFrame]:
     return painel.ler(painel.MARTS)
 
 
+def _marts_ausentes() -> list[str]:
+    if not painel.CAMINHO_BANCO.is_file():
+        return list(painel.MARTS)
+
+    conexao = duckdb.connect(str(painel.CAMINHO_BANCO), read_only=True)
+    try:
+        existentes = {
+            linha[0]
+            for linha in conexao.execute(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'marts'
+                """
+            ).fetchall()
+        }
+    finally:
+        conexao.close()
+    return [nome for nome in painel.MARTS if nome not in existentes]
+
+
+def _preparar_banco() -> str | None:
+    etapas = (
+        ("ingestão", "pipeline.ingestao"),
+        ("transformação", "pipeline.transformacao"),
+        ("materialização dos marts", "pipeline.marts"),
+    )
+    for etapa, modulo in etapas:
+        try:
+            resultado = subprocess.run(
+                [sys.executable, "-m", modulo],
+                cwd=painel.CAMINHO_BANCO.parent,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        except OSError as erro:
+            return f"Não foi possível iniciar a etapa de {etapa}: {erro}"
+
+        if resultado.returncode:
+            detalhes = "\n".join(
+                saida
+                for saida in (resultado.stdout.strip(), resultado.stderr.strip())
+                if saida
+            )
+            if not detalhes:
+                detalhes = f"Processo encerrado com código {resultado.returncode}."
+            return f"Falha na etapa de {etapa}.\n{detalhes}"
+    return None
+
+
 def _mostrar_grafico(figura: Figure) -> None:
     st.plotly_chart(
         figura,
@@ -25,13 +81,21 @@ def _mostrar_grafico(figura: Figure) -> None:
 
 st.set_page_config(page_title="Visão da operação", layout="wide")
 
-if not painel.CAMINHO_BANCO.is_file():
-    st.error(
-        f"Banco não encontrado: {painel.CAMINHO_BANCO}. "
-        "Execute a ingestão, a transformação e os marts; para recriar os "
-        "marts, rode `uv run python -m pipeline.marts`."
-    )
+try:
+    marts_ausentes = _marts_ausentes()
+except duckdb.Error as erro:
+    st.error(f"Não foi possível verificar o banco {painel.CAMINHO_BANCO}: {erro}")
     st.stop()
+
+if marts_ausentes:
+    with st.spinner("Preparando o banco e os dados analíticos..."):
+        erro_preparacao = _preparar_banco()
+    if erro_preparacao:
+        st.error(
+            "Não foi possível preparar os dados para o painel. "
+            f"{erro_preparacao}"
+        )
+        st.stop()
 
 try:
     dados = _ler_marts()
