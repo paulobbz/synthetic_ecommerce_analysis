@@ -115,13 +115,62 @@ def test_montar_html_inclui_cartoes_graficos_e_filtros():
     assert html.count('class="metric"') == 5
     assert len(re.findall(r'id="grafico-[^"]+"', html)) == 10
     assert "US$ 35,00" in html
+    assert (
+        '<span class="metric-label">Produto líder · unidades</span>'
+        "<strong>3</strong><small>Produto A</small>"
+    ) in html
+    assert (
+        '<span class="metric-label">Vendas do país líder</span>'
+        "<strong>US$ 35,00</strong><small>Brasil</small>"
+    ) in html
+    assert '<span class="metric-label">Receita entregue</span>' in html
+    assert "<small>Mês: fev/2025</small>" in html
     assert "Produto A" in html
     assert "Brasil" in html
     assert "jan/2025" in html
     assert "fev/2025" in html
     assert 'id="filtro-pais"' in html
+    assert 'value="Brasil" selected' in html
+    assert "const indiceInicioPadrao = 0;" in html
+    assert "controleInicio.value = String(indiceInicioPadrao);" in html
+    assert "atualizarPeriodo();" in html
+    assert (
+        "text: [indices.map((indice) => rotulosOriginais[indice])]"
+        in html
+    )
     assert "Plotly.restyle" in html
+    identificadores = (
+        "grafico-mensal",
+        "grafico-produtos",
+        "grafico-devolucoes",
+        "grafico-vendas-pais",
+        "grafico-pagamentos",
+        "grafico-entregas",
+        "grafico-descontos",
+        "grafico-recorrencia",
+        "grafico-margem",
+        "grafico-status",
+    )
+    posicoes = [
+        html.index(f'id="{identificador}"') for identificador in identificadores
+    ]
+    assert posicoes == sorted(posicoes)
     assert not re.search(r'<script[^>]+src=["\']https?://', html, re.IGNORECASE)
+
+
+def test_controles_meses_definem_jan_2026_como_inicio_padrao():
+    dados = pd.DataFrame(
+        {
+            "mes": pd.to_datetime(
+                ["2024-01-01", "2025-12-01", "2026-01-01", "2026-02-01"]
+            )
+        }
+    )
+
+    _, meses, indice_inicio = painel_html._controles_meses(dados)
+
+    assert meses == ["jan/2024", "dez/2025", "jan/2026", "fev/2026"]
+    assert indice_inicio == 2
 
 
 def test_gerar_salva_html_com_dados_do_duckdb_temporario(

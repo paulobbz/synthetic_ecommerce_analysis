@@ -7,8 +7,8 @@ fonte da verdade e o codigo e consequencia dela. Nao acrescente requisito
 que nao esteja escrito aqui. Se algo estiver ambiguo, pergunte antes de
 escrever codigo.
 
-Esta spec complementa Specs/Spec.txt: a etapa 1 ja materializa os CSVs em raw e
-nao deve ser alterada por esta etapa.
+Esta spec complementa Specs/Spec_etapa_1_ingestão.txt: a etapa 1 ja
+materializa os CSVs em raw e nao deve ser alterada por esta etapa.
 
 STACK
 - Python 3.12 ou superior, dependencias gerenciadas com uv

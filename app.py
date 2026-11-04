@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from datetime import date
 
 import duckdb
 import pandas as pd
@@ -121,6 +122,10 @@ if not meses:
         "Execute `uv run python -m pipeline.marts`."
     )
     st.stop()
+inicio_padrao = next(
+    (mes for mes in meses if mes >= date(2026, 1, 1)),
+    meses[0],
+)
 
 col_titulo, col_controles = st.columns([5, 7], vertical_alignment="center")
 with col_titulo:
@@ -132,7 +137,7 @@ with col_controles:
         inicio, fim = st.select_slider(
             "Período mensal",
             options=meses,
-            value=(meses[0], meses[-1]),
+            value=(inicio_padrao, meses[-1]),
             format_func=painel.rotular_mes,
         )
         st.caption("O filtro altera somente o gráfico de vendas mensais.")
@@ -151,68 +156,79 @@ pais_lider = dados["vendas_por_pais"].iloc[0]
 
 cartoes = st.columns(5)
 cartoes[0].metric(
-    "Receita entregue · último mês disponível",
+    "Receita entregue",
     painel.moeda_usd(ultimo_mes["vendas_entregues"]),
 )
+cartoes[0].caption(f"Mês: {painel.rotular_mes(ultimo_mes['mes'])}")
 cartoes[1].metric(
-    "Pedidos entregues · último mês disponível",
+    "Pedidos entregues",
     painel.numero(ultimo_mes["pedidos_entregues"]),
 )
+cartoes[1].caption(f"Mês: {painel.rotular_mes(ultimo_mes['mes'])}")
 cartoes[2].metric(
-    "Ticket médio · último mês disponível",
+    "Ticket médio",
     painel.moeda_usd(ultimo_mes["ticket_entregue"]),
 )
+cartoes[2].caption(f"Mês: {painel.rotular_mes(ultimo_mes['mes'])}")
 cartoes[3].metric(
-    "Produto líder · unidades entregues",
-    str(produto_lider["nome_produto"]),
-    delta=f'{painel.numero(produto_lider["unidades_entregues"])} unidades',
+    "Produto líder · unidades",
+    painel.numero(produto_lider["unidades_entregues"]),
 )
+cartoes[3].caption(str(produto_lider["nome_produto"]))
 cartoes[4].metric(
-    "País líder · vendas entregues",
-    str(pais_lider["pais"]),
-    delta=painel.moeda_usd(pais_lider["valor_vendido"]),
+    "Vendas do país líder",
+    painel.moeda_usd(pais_lider["valor_vendido"]),
 )
+cartoes[4].caption(str(pais_lider["pais"]))
 
 mensal_filtrado = mensal.loc[
     mensal["mes"].dt.date.between(inicio, fim)
 ]
 _mostrar_grafico(painel.grafico_vendas_mensais(mensal_filtrado))
 
-colunas = st.columns(3)
+colunas = st.columns(2)
 with colunas[0]:
     _mostrar_grafico(
         painel.grafico_produtos_mais_vendidos(dados["produtos_mais_vendidos"])
     )
 with colunas[1]:
-    _mostrar_grafico(painel.grafico_vendas_por_pais(dados["vendas_por_pais"]))
-with colunas[2]:
-    _mostrar_grafico(
-        painel.grafico_pagamentos_por_metodo(dados["pagamentos_por_metodo"])
-    )
-
-colunas = st.columns(3)
-with colunas[0]:
     _mostrar_grafico(
         painel.grafico_devolucoes_por_categoria(
             dados["devolucoes_por_categoria"]
         )
     )
-with colunas[1]:
+
+_mostrar_grafico(painel.grafico_vendas_por_pais(dados["vendas_por_pais"]))
+canal_pagamentos = st.selectbox(
+    "Canal dos pagamentos",
+    ("Todos", "Site", "Aplicativo", "Marketplace"),
+)
+_mostrar_grafico(
+    painel.grafico_pagamentos_por_metodo(
+        dados["pagamentos_por_metodo"], canal_pagamentos
+    )
+)
+
+colunas = st.columns(2)
+with colunas[0]:
     _mostrar_grafico(
         painel.grafico_entregas_por_transportadora(
             dados["entregas_por_transportadora"]
         )
     )
-with colunas[2]:
-    _mostrar_grafico(painel.grafico_descontos_por_canal(dados["descontos_por_canal"]))
+with colunas[1]:
+    _mostrar_grafico(
+        painel.grafico_descontos_por_canal(dados["descontos_por_canal"])
+    )
 
-colunas = st.columns(3)
+colunas = st.columns(2)
 with colunas[0]:
-    paises = sorted(dados["recorrencia_clientes"]["pais"].dropna().unique())
+    paises = list(
+        dict.fromkeys(dados["recorrencia_clientes"]["pais"].dropna().tolist())
+    )
     pais_selecionado = st.selectbox(
-        "País · recorrência",
-        options=[None, *paises],
-        format_func=lambda pais: "Todos os países" if pais is None else pais,
+        "País analisado · recorrência",
+        options=paises,
     )
     _mostrar_grafico(
         painel.grafico_recorrencia_clientes(
@@ -223,7 +239,6 @@ with colunas[1]:
     _mostrar_grafico(
         painel.grafico_margem_estimada_produto(dados["margem_estimada_produto"])
     )
-with colunas[2]:
-    _mostrar_grafico(
-        painel.grafico_status_pedido_pagamento(dados["status_pedido_pagamento"])
-    )
+_mostrar_grafico(
+    painel.grafico_status_pedido_pagamento(dados["status_pedido_pagamento"])
+)

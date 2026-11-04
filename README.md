@@ -1,8 +1,8 @@
 # Pipeline de dados: e-commerce sintético
 
-Pipeline de dados em Python sobre um dataset sintético de comércio eletrônico, com DuckDB como banco. Projeto da Aceleração Emprega Dados - Engenheiro de Dados.
+Pipeline de dados em Python sobre um dataset sintético de comércio eletrônico, com DuckDB como banco. Projeto da Aceleração Emprega Dados - Engenheiro de Dados Jr.
 
-O desenvolvimento segue *spec-driven development*: `Specs/Spec.txt` especifica o projeto e a ingestão; `Specs/Spec_etapa_2.txt` especifica a transformação para `refined`; `Specs/Spec_painel.txt` especifica os painéis; `Specs/Spec_etapa_5.txt` especifica os testes automatizados.
+O desenvolvimento segue *spec-driven development*: as especificações de cada etapa ficam em `Specs/`, incluindo ingestão, transformação, marts, painéis e testes.
 
 ## Stack
 
@@ -29,10 +29,11 @@ O desenvolvimento segue *spec-driven development*: `Specs/Spec.txt` especifica o
 ├── dashboard.html     # snapshot estático e independente do painel
 ├── ui.py              # abre a interface web do DuckDB
 ├── Specs/
-│   ├── Spec.txt       # especificação do projeto
-│   ├── Spec_etapa_2.txt # especificação da transformação para refined
-│   ├── Spec_painel.txt # especificação do painel Streamlit
-│   └── Spec_etapa_5.txt # especificação dos testes automatizados
+│   ├── Spec_etapa_1_ingestão.txt
+│   ├── Spec_etapa_2_transformação.txt
+│   ├── Spec_etapa_3_marts.txt
+│   ├── Spec_etapa_4_paineis_streamlit_html.txt
+│   └── Spec_etapa_5_testes.txt
 ├── pyproject.toml
 └── uv.lock
 ```
@@ -79,7 +80,7 @@ Execute a transformação antes de materializar os marts. Cada arquivo em `marts
 uv run streamlit run app.py
 ```
 
-O painel apresenta indicadores do mês mais recente e gráficos de vendas, produtos, devoluções, pagamentos, entregas, descontos, recorrência, margem estimada e status de pedidos. O filtro de período afeta somente o gráfico mensal; o seletor de país afeta somente o gráfico de recorrência. A leitura é somente leitura e a conexão ao banco fecha após carregar os dados, então os marts podem ser recriados com o painel aberto. Use **Recarregar dados** para limpar o cache e ler as tabelas novamente.
+O painel apresenta indicadores do mês mais recente e gráficos de vendas, produtos, devoluções, pagamentos, entregas, descontos, recorrência, margem estimada e status de pedidos. Os cartões destacam valores numéricos; mês, nome do produto líder e país ficam em texto secundário para evitar que nomes longos dominem ou sejam cortados. O filtro de período afeta somente o gráfico mensal; o seletor de país afeta somente o gráfico de recorrência. A leitura é somente leitura e a conexão ao banco fecha após carregar os dados, então os marts podem ser recriados com o painel aberto. Use **Recarregar dados** para limpar o cache e ler as tabelas novamente.
 
 **Deploy no Streamlit Community Cloud:** configure o repositório, o branch e `app.py` como arquivo principal. O banco `ecommerce.duckdb` não é versionado; se ele ou algum mart estiver ausente, o app gera os dados na primeira inicialização usando os CSVs versionados em `raw/`. Por isso, não é necessário enviar o arquivo DuckDB ao GitHub.
 
@@ -111,9 +112,11 @@ Encerre com `Ctrl+C`. Com a interface aberta, a ingestão falha com "Could not s
 | 2 | Refined: conversões de tipo e nomes de coluna conforme a spec | implementada |
 | 3 | Marts: consultas analíticas materializadas no schema `marts` | implementada |
 | 4 | Painéis Streamlit e HTML estático: visualização dos marts | implementada |
-| 5 | Testes automatizados do pipeline, marts e painéis | em implementação |
+| 5 | Testes automatizados do pipeline, marts e painéis | implementada |
 
 ### Etapa 1: ingestão
+
+Especificação: [Spec_etapa_1_ingestão.txt](Specs/Spec_etapa_1_ingestão.txt).
 
 Cada arquivo de `raw/` vira uma tabela no schema `raw`, com nome em português:
 
@@ -135,6 +138,8 @@ Regras da etapa:
 - **Tudo ou nada.** Se qualquer um dos sete CSVs faltar, o script lista os que faltam e encerra antes de gravar qualquer tabela.
 
 ### Etapa 2: transformação para `refined`
+
+Especificação: [Spec_etapa_2_transformação.txt](Specs/Spec_etapa_2_transformação.txt).
 
 A transformação lê as tabelas de `raw` e recria suas versões tipadas e com nomes de coluna em português no schema `refined`. Ela não altera `raw`, não preenche valores nulos e não corrige anomalias de negócio. Para executar:
 
@@ -160,7 +165,15 @@ Linhas inteiramente duplicadas são reduzidas a uma ocorrência. Chaves repetida
 
 ### Etapa 3: marts
 
+Especificação: [Spec_etapa_3_marts.txt](Specs/Spec_etapa_3_marts.txt).
+
 As consultas respondem a perguntas sobre vendas mensais, produtos mais vendidos, devoluções e reembolsos por categoria, vendas por país, pagamentos por método e canal, desempenho de transportadoras, descontos por canal, recorrência de clientes, margem estimada por produto e relação entre status do pedido e do pagamento. Nove dos dez marts combinam tabelas com `JOIN`; agregações intermediárias evitam multiplicar valores de pedidos.
+
+Para materializar ou recriar as dez tabelas do schema `marts`:
+
+```
+uv run python -m pipeline.marts
+```
 
 | Arquivo SQL | Tabela materializada | Pergunta respondida |
 |-------------|----------------------|---------------------|
@@ -175,9 +188,11 @@ As consultas respondem a perguntas sobre vendas mensais, produtos mais vendidos,
 | `margem_estimada_produto.sql` | `marts.margem_estimada_produto` | Quais produtos têm maior margem bruta estimada? |
 | `status_pedido_pagamento.sql` | `marts.status_pedido_pagamento` | Como status de captura, falha ou estorno se relacionam com pedidos? |
 
-Todos os valores de vendas usam a moeda registrada nos pedidos (atualmente USD). O mart de vendas mensais inclui uma métrica de pedidos entregues (`vendas_entregues`) separada do total registrado em todos os status (`valor_pedido_registrado`). O mart de devoluções distingue solicitações de itens efetivamente reembolsados. A margem é estimada com o custo atual do produto e não deduz frete, impostos, descontos alocados ou reembolsos.
+Os valores monetários são usados sem conversão de moeda; os dados atuais usam USD. O mart de vendas mensais inclui uma métrica de pedidos entregues (`vendas_entregues`) separada do total registrado em todos os status (`valor_pedido_registrado`). O mart de devoluções distingue solicitações de itens efetivamente reembolsados. A margem é estimada com o custo atual do produto e não deduz frete, impostos, descontos alocados ou reembolsos.
 
 ### Etapa 4: painel Streamlit
+
+Especificação: [Spec_etapa_4_paineis_streamlit_html.txt](Specs/Spec_etapa_4_paineis_streamlit_html.txt).
 
 O painel lê as dez tabelas do schema `marts` sem recalcular métricas em Python. Os gráficos usam os valores e agregações definidos nos arquivos SQL; valores monetários são identificados em USD e a margem por produto é apresentada como estimativa. Para abrir a aplicação:
 
@@ -188,6 +203,8 @@ uv run streamlit run app.py
 O controle mensal filtra somente o gráfico de vendas entregues, pois os demais marts não têm uma dimensão mensal. O seletor de país filtra somente o gráfico de recorrência. O cache pode ser atualizado pelo botão **Recarregar dados**. O painel abre o DuckDB em modo somente leitura e fecha a conexão após a leitura; assim, `uv run python -m pipeline.marts` pode recriar as tabelas enquanto a aplicação está aberta.
 
 ### Etapa 5: testes automatizados
+
+Especificação: [Spec_etapa_5_testes.txt](Specs/Spec_etapa_5_testes.txt).
 
 Os testes usam apenas CSVs e bancos DuckDB temporários, com dados sintéticos; não dependem de `ecommerce.duckdb` nem dos CSVs de `raw/`. A cobertura é medida no código de `pipeline/` e em `painel.py`; os aplicativos Streamlit e DuckDB são verificados manualmente. Para executar a suite e ver a cobertura:
 
