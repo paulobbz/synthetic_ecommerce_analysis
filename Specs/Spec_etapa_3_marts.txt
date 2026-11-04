@@ -1,0 +1,228 @@
+SPEC DA ETAPA 3 — MARTS ANALITICOS
+
+CONTEXTO
+Este projeto implementa um pipeline de dados sobre um dataset sintetico de
+comercio eletronico. O desenvolvimento segue spec-driven development: esta
+spec descreve o contrato dos marts e deve corresponder as consultas SQL que
+produzem as tabelas analiticas. Nao se deve acrescentar regra de negocio
+sem atualizar esta spec.
+
+Esta etapa sucede a transformacao da etapa 2. Ela le as tabelas tipadas do
+schema refined e materializa tabelas agregadas no schema marts. A etapa nao
+altera raw nem refined.
+
+STACK
+- Python 3.12 ou superior, dependencias gerenciadas com uv
+- DuckDB 1.5.6, no arquivo ecommerce.duckdb na raiz do projeto
+- SQL executado pelo DuckDB; Python coordena a validacao e a execucao
+- Nenhum orquestrador. Execucao:
+    uv run python -m pipeline.marts
+
+O QUE JA EXISTE (usar, nao reimplementar)
+pipeline/db.py expoe conectar(), que abre ecommerce.duckdb.
+pipeline/transformacao.py materializa no schema refined:
+  clientes, devolucoes, itens_pedido, pagamentos, pedidos, produtos,
+  remessas.
+
+ARTEFATOS
+pipeline/marts.py, executavel pela linha de comando.
+Uma consulta SQL por mart, na pasta marts/:
+  vendas_mensais.sql
+  produtos_mais_vendidos.sql
+  devolucoes_por_categoria.sql
+  vendas_por_pais.sql
+  pagamentos_por_metodo.sql
+  entregas_por_transportadora.sql
+  descontos_por_canal.sql
+  recorrencia_clientes.sql
+  margem_estimada_produto.sql
+  status_pedido_pagamento.sql
+
+SPEC
+
+1. ESCOPO E ORDEM
+   A etapa valida a existencia em refined das tabelas necessarias:
+   clientes, devolucoes, itens_pedido, pagamentos, pedidos, produtos e
+   remessas. Se alguma estiver ausente, informa quais e orienta executar:
+     uv run python -m pipeline.transformacao
+   A verificacao evita materializar resultados parciais a partir de uma
+   camada refined incompleta.
+
+   As dez consultas acima sao a lista completa de modelos. Antes de abrir
+   o banco, verificar se todos os arquivos SQL existem. Se faltar algum,
+   listar os arquivos ausentes e encerrar com sys.exit(1). Assim, uma
+   execucao nao comeca parcialmente por falta de modelo.
+
+   As consultas leem somente refined e escrevem somente no schema marts.
+   Nenhuma regra de agregacao e calculada em Python: SQL e a definicao
+   auditavel dos indicadores.
+
+2. MATERIALIZACAO E REEXECUCAO
+   Criar o schema marts se necessario e executar cada arquivo SQL, que usa
+   CREATE OR REPLACE TABLE. Reexecutar substitui os resultados anteriores,
+   nao acrescenta linhas.
+
+   Executar a materializacao em uma transacao. Se uma consulta falhar,
+   informar qual arquivo falhou, encerrar com sys.exit(1) e reverter a
+   transacao, preservando as tabelas marts anteriores. A conexao e fechada
+   mesmo em caso de erro.
+
+   A ordem de execucao segue MODELOS em pipeline/marts.py:
+   vendas_mensais, produtos_mais_vendidos, devolucoes_por_categoria,
+   vendas_por_pais, pagamentos_por_metodo, entregas_por_transportadora,
+   descontos_por_canal, recorrencia_clientes, margem_estimada_produto e
+   status_pedido_pagamento.
+
+3. DEFINICAO DOS MARTS
+   Os valores monetarios sao usados como registrados nas tabelas refined,
+   sem conversao de moeda; os dados atuais usam USD. Cada mart
+   preserva o escopo e os filtros explicitamente indicados abaixo.
+
+   01. marts.vendas_mensais — uma linha por mes representado por pelo
+       menos um pedido em data_pedido.
+       Colunas: mes, pedidos_total, pedidos_entregues,
+       valor_pedido_registrado, vendas_entregues, ticket_entregue.
+       pedidos_total conta pedidos de todos os status; pedidos_entregues
+       conta status delivered. valor_pedido_registrado soma valor_total
+       de todos os status. vendas_entregues soma valor_total somente de
+       pedidos delivered. ticket_entregue e a media de valor_total dos
+       pedidos delivered, arredondada a duas casas. Meses sem pedidos nao
+       geram linha. Separar entregues do valor total evita apresentar
+       pedidos nao entregues como venda entregue.
+
+   02. marts.produtos_mais_vendidos — uma linha por produto.
+       Colunas: produto_id, nome_produto, categoria, unidades_entregues,
+       linhas_pedido, receita_itens.
+       Inclui somente itens de pedidos delivered; agrega quantidade,
+       numero de linhas e total_item por produto e retorna os dez maiores
+       por unidades_entregues. Nao ha criterio secundario de desempate
+       declarado. O filtro evita contar itens de pedidos em outros status
+       como unidades entregues.
+
+   03. marts.devolucoes_por_categoria — uma linha por categoria.
+       Colunas: categoria, itens_pedidos, itens_com_solicitacao,
+       pct_itens_com_solicitacao, itens_reembolsados,
+       pct_itens_reembolsados, valor_reembolsado.
+       Antes do join, agrega devolucoes por item_pedido_id para evitar
+       multiplicar linhas de itens quando houver mais de uma devolucao.
+       Uma solicitacao e um devolucao_id distinto. Um item e contado como
+       reembolsado se tiver ao menos uma devolucao com status refunded;
+       valor_reembolsado soma valor_reembolso dessas devolucoes.
+       Os percentuais usam como denominador todos os itens de cada
+       categoria presentes em refined.itens_pedido, sem filtro de status
+       do pedido. Ausencia de devolucao resulta em contagem zero e valor
+       reembolsado zero. Ambos os percentuais sao arredondados a duas
+       casas. A categoria nula permanece como grupo.
+
+   04. marts.vendas_por_pais — uma linha por pais do cliente.
+       Colunas: pais, pedidos_entregues, clientes_com_compra,
+       valor_vendido, ticket_medio.
+       Inclui pedidos delivered, relaciona pedidos a clientes, conta
+       pedidos e clientes distintos, soma valor_total e calcula a media
+       de valor_total por pedido, arredondada a duas casas. O pais e o
+       pais cadastrado para o cliente; nao ha conversao de moeda.
+
+   05. marts.pagamentos_por_metodo — uma linha por canal, metodo e status
+       de pagamento.
+       Colunas: canal, metodo, status_pagamento, pagamentos, pedidos,
+       valor_pagamentos.
+       Relaciona pagamentos a pedidos e agrega contagem de pagamentos
+       distintos, pedidos distintos e valor dos pagamentos. Nao filtra
+       status do pedido nem status do pagamento; a dimensao de status
+       continua visivel para distinguir os valores.
+
+   06. marts.entregas_por_transportadora — uma linha por transportadora.
+       Colunas: transportadora, remessas, entregues, pct_entregues,
+       media_dias_envio_entrega, media_dias_pedido_entrega.
+       Relaciona remessas a pedidos. remessas conta as linhas relacionadas;
+       entregues conta as que tem data_entrega. pct_entregues divide
+       entregues por remessas. As medias de dias consideram somente linhas
+       com data_entrega nao nula: uma mede data_envio ate data_entrega, a
+       outra data_pedido ate data_entrega. As medias e o percentual sao
+       arredondados a duas casas. A consulta considera somente remessas
+       com pedido correspondente e nao exclui status de pedido ou remessa.
+
+   07. marts.descontos_por_canal — uma linha por canal e status do pedido.
+       Colunas: canal, status_pedido, pedidos, subtotal, descontos,
+       pct_desconto_ponderado, pct_desconto_medio_por_pedido, unidades.
+       Agrega previamente a quantidade de unidades por pedido e depois
+       relaciona esse resultado a pedidos para nao multiplicar valores
+       monetarios por causa das linhas de itens. pct_desconto_ponderado
+       e 100 vezes a soma dos descontos dividida pela soma dos subtotais.
+       pct_desconto_medio_por_pedido e a media dos percentuais calculados
+       por pedido. subtotal, descontos e pedidos incluem todos os status.
+       Divisor zero produz NULL no percentual correspondente; a media por
+       pedido ignora os pedidos cujo subtotal e zero. Percentuais sao
+       arredondados a duas casas. Unidades sem itens contribuem com zero.
+
+   08. marts.recorrencia_clientes — uma linha por pais e nivel de
+       fidelidade do cliente.
+       Colunas: pais, nivel_fidelidade, clientes, clientes_recorrentes,
+       pct_recorrentes, media_pedidos_entregues, valor_entregue.
+       A recorrencia e definida nesta consulta como mais de um pedido
+       delivered por cliente. A base inclui clientes, inclusive quem nao
+       tem pedido entregue; pedidos nao entregues nao entram na contagem
+       nem no valor entregue. A media inclui zero para clientes sem pedido
+       entregue; percentuais e media sao arredondados a duas casas. O pais
+       e o nivel sao os atributos cadastrados do cliente.
+
+   09. marts.margem_estimada_produto — uma linha por produto.
+       Colunas: categoria, produto_id, nome_produto,
+       receita_itens_entregues, custo_estimado, margem_bruta_estimada,
+       margem_pct.
+       Inclui itens de pedidos delivered e calcula custo com
+       quantidade multiplicada pelo custo_unitario atual cadastrado no
+       produto. margem_bruta_estimada e receita dos itens menos esse custo;
+       margem_pct e a margem dividida pela receita dos itens, em
+       percentual de 0 a 100, arredondado a duas casas. Retorna os dez
+       produtos de maior margem_bruta_estimada. E uma estimativa: nao
+       aloca frete, impostos,
+       descontos do pedido ou reembolsos, nem representa necessariamente
+       o custo historico do produto.
+
+   10. marts.status_pedido_pagamento — uma linha por canal e status do
+       pedido.
+       Colunas: canal, status_pedido, pedidos, pedidos_com_captura,
+       pedidos_com_falha, pedidos_com_estorno, pedidos_sem_pagamento,
+       valor_pedidos, valor_capturado, valor_estornado.
+       Agrega pagamentos por pedido antes de relaciona-los a pedidos para
+       preservar a granularidade dos valores de pedido. Captura, falha e
+       estorno correspondem aos status captured, failed e refunded dos
+       pagamentos; um mesmo pedido pode aparecer em mais de uma dessas
+       contagens. pedidos_sem_pagamento conta pedidos sem qualquer linha
+       correspondente em pagamentos. valor_pedidos inclui todos os
+       pedidos do grupo; valor_capturado e valor_estornado somam somente
+       valores dos respectivos status de pagamento. Os status de pedido
+       nao sao filtrados.
+
+4. SAIDA E ERROS
+   Para cada consulta executada, imprimir uma linha com o nome da tabela
+   e a contagem de linhas lida do banco:
+     marts.vendas_mensais: 33 linhas
+   A contagem pode ser zero; um mart vazio e um resultado valido.
+   Reconfigurar stdout para UTF-8 quando suportado, para que nomes e
+   mensagens sejam legiveis em terminais Windows.
+
+   Se uma consulta SQL falhar, imprimir o nome do arquivo e o erro original,
+   reverter a transacao e encerrar com sys.exit(1). Erros de entrada devem
+   ser corrigidos na camada apropriada, nao mascarados como mart vazio.
+
+CRITERIOS DE ACEITE
+- Os dez arquivos SQL sao executados e criam ou substituem as dez tabelas
+  previstas no schema marts. Objetos fora dessa lista nao sao removidos.
+- Rodar pipeline.marts duas vezes produz as mesmas tabelas e contagens;
+  linhas nao sao acumuladas.
+- Se faltar tabela refined necessaria ou arquivo SQL, a etapa encerra com
+  sys.exit(1) e informa o que deve ser corrigido.
+- Se uma consulta falhar, a transacao e revertida e tabelas marts
+  anteriores permanecem preservadas.
+- Os testes SQL usam dados sinteticos em DuckDB temporario e verificam as
+  regras principais de vendas mensais, produtos entregues e devolucoes.
+- A leitura dos marts pelo painel permanece uma operacao separada; esta
+  etapa nao importa Streamlit nem calcula graficos.
+
+ENTREGA
+1. Os dez arquivos SQL em marts/ e pipeline/marts.py para executa-los.
+2. Uma lista de suposicoes que nao estejam definidas nesta spec. No
+   comportamento documentado acima, uma decisao de negocio deve ser
+   explicitada antes de mudar a consulta correspondente.

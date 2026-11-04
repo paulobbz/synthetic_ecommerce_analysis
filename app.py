@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
+from datetime import date
+
 import duckdb
 import pandas as pd
 import streamlit as st
@@ -15,6 +19,59 @@ def _ler_marts() -> dict[str, pd.DataFrame]:
     return painel.ler(painel.MARTS)
 
 
+def _marts_ausentes() -> list[str]:
+    if not painel.CAMINHO_BANCO.is_file():
+        return list(painel.MARTS)
+
+    conexao = duckdb.connect(str(painel.CAMINHO_BANCO), read_only=True)
+    try:
+        existentes = {
+            linha[0]
+            for linha in conexao.execute(
+                """
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = 'marts'
+                """
+            ).fetchall()
+        }
+    finally:
+        conexao.close()
+    return [nome for nome in painel.MARTS if nome not in existentes]
+
+
+def _preparar_banco() -> str | None:
+    etapas = (
+        ("ingestão", "pipeline.ingestao"),
+        ("transformação", "pipeline.transformacao"),
+        ("materialização dos marts", "pipeline.marts"),
+    )
+    for etapa, modulo in etapas:
+        try:
+            resultado = subprocess.run(
+                [sys.executable, "-m", modulo],
+                cwd=painel.CAMINHO_BANCO.parent,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        except OSError as erro:
+            return f"Não foi possível iniciar a etapa de {etapa}: {erro}"
+
+        if resultado.returncode:
+            detalhes = "\n".join(
+                saida
+                for saida in (resultado.stdout.strip(), resultado.stderr.strip())
+                if saida
+            )
+            if not detalhes:
+                detalhes = f"Processo encerrado com código {resultado.returncode}."
+            return f"Falha na etapa de {etapa}.\n{detalhes}"
+    return None
+
+
 def _mostrar_grafico(figura: Figure) -> None:
     st.plotly_chart(
         figura,
@@ -25,13 +82,21 @@ def _mostrar_grafico(figura: Figure) -> None:
 
 st.set_page_config(page_title="Visão da operação", layout="wide")
 
-if not painel.CAMINHO_BANCO.is_file():
-    st.error(
-        f"Banco não encontrado: {painel.CAMINHO_BANCO}. "
-        "Execute a ingestão, a transformação e os marts; para recriar os "
-        "marts, rode `uv run python -m pipeline.marts`."
-    )
+try:
+    marts_ausentes = _marts_ausentes()
+except duckdb.Error as erro:
+    st.error(f"Não foi possível verificar o banco {painel.CAMINHO_BANCO}: {erro}")
     st.stop()
+
+if marts_ausentes:
+    with st.spinner("Preparando o banco e os dados analíticos..."):
+        erro_preparacao = _preparar_banco()
+    if erro_preparacao:
+        st.error(
+            "Não foi possível preparar os dados para o painel. "
+            f"{erro_preparacao}"
+        )
+        st.stop()
 
 try:
     dados = _ler_marts()
@@ -57,6 +122,10 @@ if not meses:
         "Execute `uv run python -m pipeline.marts`."
     )
     st.stop()
+inicio_padrao = next(
+    (mes for mes in meses if mes >= date(2026, 1, 1)),
+    meses[0],
+)
 
 col_titulo, col_controles = st.columns([5, 7], vertical_alignment="center")
 with col_titulo:
@@ -68,7 +137,7 @@ with col_controles:
         inicio, fim = st.select_slider(
             "Período mensal",
             options=meses,
-            value=(meses[0], meses[-1]),
+            value=(inicio_padrao, meses[-1]),
             format_func=painel.rotular_mes,
         )
         st.caption("O filtro altera somente o gráfico de vendas mensais.")
@@ -87,68 +156,79 @@ pais_lider = dados["vendas_por_pais"].iloc[0]
 
 cartoes = st.columns(5)
 cartoes[0].metric(
-    "Receita entregue · último mês disponível",
+    "Receita entregue",
     painel.moeda_usd(ultimo_mes["vendas_entregues"]),
 )
+cartoes[0].caption(f"Mês: {painel.rotular_mes(ultimo_mes['mes'])}")
 cartoes[1].metric(
-    "Pedidos entregues · último mês disponível",
+    "Pedidos entregues",
     painel.numero(ultimo_mes["pedidos_entregues"]),
 )
+cartoes[1].caption(f"Mês: {painel.rotular_mes(ultimo_mes['mes'])}")
 cartoes[2].metric(
-    "Ticket médio · último mês disponível",
+    "Ticket médio",
     painel.moeda_usd(ultimo_mes["ticket_entregue"]),
 )
+cartoes[2].caption(f"Mês: {painel.rotular_mes(ultimo_mes['mes'])}")
 cartoes[3].metric(
-    "Produto líder · unidades entregues",
-    str(produto_lider["nome_produto"]),
-    delta=f'{painel.numero(produto_lider["unidades_entregues"])} unidades',
+    "Produto líder · unidades",
+    painel.numero(produto_lider["unidades_entregues"]),
 )
+cartoes[3].caption(str(produto_lider["nome_produto"]))
 cartoes[4].metric(
-    "País líder · vendas entregues",
-    str(pais_lider["pais"]),
-    delta=painel.moeda_usd(pais_lider["valor_vendido"]),
+    "Vendas do país líder",
+    painel.moeda_usd(pais_lider["valor_vendido"]),
 )
+cartoes[4].caption(str(pais_lider["pais"]))
 
 mensal_filtrado = mensal.loc[
     mensal["mes"].dt.date.between(inicio, fim)
 ]
 _mostrar_grafico(painel.grafico_vendas_mensais(mensal_filtrado))
 
-colunas = st.columns(3)
+colunas = st.columns(2)
 with colunas[0]:
     _mostrar_grafico(
         painel.grafico_produtos_mais_vendidos(dados["produtos_mais_vendidos"])
     )
 with colunas[1]:
-    _mostrar_grafico(painel.grafico_vendas_por_pais(dados["vendas_por_pais"]))
-with colunas[2]:
-    _mostrar_grafico(
-        painel.grafico_pagamentos_por_metodo(dados["pagamentos_por_metodo"])
-    )
-
-colunas = st.columns(3)
-with colunas[0]:
     _mostrar_grafico(
         painel.grafico_devolucoes_por_categoria(
             dados["devolucoes_por_categoria"]
         )
     )
-with colunas[1]:
+
+_mostrar_grafico(painel.grafico_vendas_por_pais(dados["vendas_por_pais"]))
+canal_pagamentos = st.selectbox(
+    "Canal dos pagamentos",
+    ("Todos", "Site", "Aplicativo", "Marketplace"),
+)
+_mostrar_grafico(
+    painel.grafico_pagamentos_por_metodo(
+        dados["pagamentos_por_metodo"], canal_pagamentos
+    )
+)
+
+colunas = st.columns(2)
+with colunas[0]:
     _mostrar_grafico(
         painel.grafico_entregas_por_transportadora(
             dados["entregas_por_transportadora"]
         )
     )
-with colunas[2]:
-    _mostrar_grafico(painel.grafico_descontos_por_canal(dados["descontos_por_canal"]))
+with colunas[1]:
+    _mostrar_grafico(
+        painel.grafico_descontos_por_canal(dados["descontos_por_canal"])
+    )
 
-colunas = st.columns(3)
+colunas = st.columns(2)
 with colunas[0]:
-    paises = sorted(dados["recorrencia_clientes"]["pais"].dropna().unique())
+    paises = list(
+        dict.fromkeys(dados["recorrencia_clientes"]["pais"].dropna().tolist())
+    )
     pais_selecionado = st.selectbox(
-        "País · recorrência",
-        options=[None, *paises],
-        format_func=lambda pais: "Todos os países" if pais is None else pais,
+        "País analisado · recorrência",
+        options=paises,
     )
     _mostrar_grafico(
         painel.grafico_recorrencia_clientes(
@@ -159,7 +239,6 @@ with colunas[1]:
     _mostrar_grafico(
         painel.grafico_margem_estimada_produto(dados["margem_estimada_produto"])
     )
-with colunas[2]:
-    _mostrar_grafico(
-        painel.grafico_status_pedido_pagamento(dados["status_pedido_pagamento"])
-    )
+_mostrar_grafico(
+    painel.grafico_status_pedido_pagamento(dados["status_pedido_pagamento"])
+)

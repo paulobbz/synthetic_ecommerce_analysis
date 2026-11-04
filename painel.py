@@ -59,34 +59,47 @@ dois últimos usam a linha líder já devolvida pelo mart. Isso evita
 apresentar valores parciais como totais gerais.
 
 Segunda faixa, largura inteira:
-01 · Vendas entregues por mês. Linha com marcadores, mes no eixo X e
-vendas_entregues em USD no eixo Y.
+01 · Vendas entregues por mês. Linha com marcadores, mês no eixo X,
+vendas_entregues em USD no eixo Y e rótulos de dados com separador de
+milhar brasileiro.
 
-Terceira faixa, três colunas:
+Terceira faixa, dois gráficos em duas colunas:
 02 · Produtos mais vendidos: barras horizontais de unidades_entregues por
-nome_produto, em ordem decrescente.
-04 · Vendas por país: barras horizontais de valor_vendido em USD, em ordem
-decrescente.
-05 · Mix de pagamentos: valor_pagamentos em USD por método, com status de
-pagamento em cores e painéis separados por canal.
-
-Quarta faixa, três colunas:
+nome_produto, em ordem decrescente e com rótulos numéricos; os valores do
+eixo inferior ficam ocultos.
 03 · Solicitações e reembolsos por categoria: barras horizontais agrupadas
-de pct_itens_com_solicitacao e pct_itens_reembolsados.
-06 · Prazo e taxa de entrega por transportadora: dispersão de
-media_dias_envio_entrega (dias) contra pct_entregues (%), identificando a
-transportadora em cada ponto.
-07 · Descontos por canal: pct_desconto_ponderado por canal, colorido por
-status_pedido.
+de pct_itens_com_solicitacao e pct_itens_reembolsados, com rótulos e a
+explicação de que os percentuais usam os itens da categoria como base. O
+eixo percentual usa escala automática.
+04 · Vendas por país: barras horizontais de valor_vendido em USD, em ordem
+decrescente e com valores nos rótulos; os valores do eixo inferior ficam
+ocultos.
+05 · Mix de pagamentos: barras horizontais empilhadas a 100% por método,
+com status em português por cor e rótulos dos valores em USD. O seletor
+permite todos os canais ou Site, Aplicativo e Marketplace; "Todos" inclui
+os canais do mart. O valor exato em USD também aparece no hover e
+"% do valor" no eixo X.
 
-Quinta faixa, três colunas:
-08 · Recorrência por país e fidelidade: pct_recorrentes por
-nivel_fidelidade. Um seletor local filtra o país somente neste gráfico.
+Quarta faixa: dois gráficos em duas colunas.
+06 · Comparação tabular de media_dias_envio_entrega (dias) e
+pct_entregues (%) por transportadora; os dois indicadores têm unidades
+distintas e são apresentados em colunas separadas.
+07 · Descontos por canal: pct_desconto_ponderado por canal e
+status_pedido. Canais e status são exibidos em português e cada barra tem
+seu percentual.
+
+Quinta faixa: dois gráficos em duas colunas e o gráfico 10 em largura
+inteira.
+08 · Recorrência por nível de fidelidade: pct_recorrentes por país
+selecionado e nivel_fidelidade, com rótulos percentuais nas barras. O
+seletor lista todos os países e abre no primeiro país do mart para evitar
+sobreposição entre muitos países; os valores do eixo lateral ficam ocultos.
 09 · Margem estimada por produto: barras horizontais de
 margem_bruta_estimada em USD por nome_produto, preservando a ordem do mart
-e identificando a margem como estimada.
-10 · Status de pedidos e pagamentos: pedidos com captura, falha, estorno e
-sem pagamento por status_pedido, separados por canal.
+e identificando a margem como estimada; os valores aparecem nos rótulos.
+10 · Matriz da situação do pagamento por status_pedido e canal, com
+contagens exatas nas células e escala de cor logarítmica para que status
+menos frequentes continuem visíveis.
 
 Cada gráfico identifica as unidades dos eixos, usa uma cor principal
 consistente e é renderizado com width="stretch". Percentuais já vêm na
@@ -103,15 +116,16 @@ depender do locale da máquina. As datas são rotuladas com abreviações de
 meses em português definidas no código, para não variar conforme o sistema.
 
 5. FILTROS
-O seletor mensal oferece os valores de mes em vendas_mensais e começa com
-todo o intervalo disponível selecionado. Ele filtra somente o gráfico de
-vendas; os demais marts não têm mês e os cartões não devem ser recalculados
-para o período. A página informa: "O filtro altera somente o gráfico de
-vendas mensais."
+O seletor mensal oferece todos os valores de mes em vendas_mensais,
+incluindo os meses desde jan/2024, e começa em jan/2026 até o mês mais
+recente disponível. Se jan/2026 não estiver disponível, começa no primeiro
+mês disponível. Ele filtra somente o gráfico de vendas; os demais marts
+não têm mês e os cartões não devem ser recalculados para o período. A
+página informa: "O filtro altera somente o gráfico de vendas mensais."
 
-O seletor de país afeta somente as linhas do gráfico de recorrência. A
-separação dos filtros mantém explícito o escopo temporal disponível em
-cada mart.
+O seletor de país afeta somente as linhas do gráfico de recorrência e
+começa no primeiro país devolvido pelo mart. Cada gráfico mostra um país
+por vez, mas o seletor conserva todos os países disponíveis.
 
 6. CACHE E ERROS
 app.py usa st.cache_data para a leitura. "Recarregar dados" limpa o cache.
@@ -124,15 +138,17 @@ para substituir os marts.
 CRITÉRIOS DE ACEITE
 - O comando uv run streamlit run app.py abre o painel e lê os dez marts em
   modo somente leitura.
-- O gráfico mensal exibe os 33 meses disponíveis, com o intervalo completo
-  selecionado inicialmente.
+- O gráfico mensal mantém todos os 33 meses disponíveis para filtro e começa
+  selecionado de jan/2026 até o mês mais recente.
 - O filtro mensal só altera esse gráfico; os cinco cartões e os outros
   nove gráficos não mudam.
 - O seletor de país só altera o gráfico de recorrência.
 - Os cartões mostram os registros definidos acima sem recalcular métricas;
   os valores monetários e a margem estimada são identificados em USD.
 - Pagamentos distinguem método, status e canal; status de pedidos
-  distinguem status do pedido e canal.
+  distinguem status do pedido e canal, com contagens exatas na matriz.
+- Os gráficos 01, 02, 03, 04, 05, 07, 08 e 09 apresentam rótulos; os eixos
+  redundantes dos gráficos 01, 02, 04 e 08 não exibem seus valores.
 - Uma busca por operações tabulares proibidas não encontra cálculos de
   negócio em painel.py e app.py.
 - Arquivo ou marts ausentes geram mensagem explícita e instrução para
@@ -141,8 +157,8 @@ CRITÉRIOS DE ACEITE
   erro de lock.
 
 SUPOSIÇÕES APROVADAS NESTA PROPOSTA
-- Sem rascunho visual, a página usa cinco cartões e cinco faixas: uma para
-  cartões, uma para vendas mensais e três com três gráficos cada.
+- Sem rascunho visual, a página usa cinco cartões, uma faixa para vendas
+  mensais e três seções de gráficos com larguras ajustadas à legibilidade.
 - Sem mart de KPIs gerais, os cartões usam o mês mais recente e as linhas
   líderes já retornadas por outros marts; não são totais do período.
 - Somente vendas_mensais tem mês, então apenas seu gráfico é filtrado por
@@ -154,6 +170,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import date
 from decimal import Decimal
+from math import floor, log10
 from pathlib import Path
 
 import duckdb
@@ -177,6 +194,41 @@ MARTS = (
 
 AZUL = "#2878B5"
 CORES = ["#2878B5", "#F28E2B", "#59A14F", "#E15759", "#B07AA1", "#76B7B2"]
+_CANAIS_PT = {
+    "app": "Aplicativo",
+    "marketplace": "Marketplace",
+    "store": "Loja",
+    "web": "Site",
+    "loja": "Loja",
+}
+_STATUS_PEDIDO_PT = {
+    "cancelled": "Cancelado",
+    "delivered": "Entregue",
+    "processing": "Em processamento",
+    "returned": "Devolvido",
+    "shipped": "Enviado",
+}
+_STATUS_PAGAMENTO_PT = {
+    "captured": "Capturado",
+    "failed": "Falhou",
+    "refunded": "Reembolsado",
+}
+_METODOS_PAGAMENTO_PT = {
+    "apple_pay": "Apple Pay",
+    "bank_transfer": "Transferência bancária",
+    "card": "Cartão",
+    "cartao": "Cartão",
+    "google_pay": "Google Pay",
+    "klarna": "Klarna",
+    "paypal": "PayPal",
+    "pix": "Pix",
+}
+_NIVEIS_FIDELIDADE_PT = {
+    "gold": "Ouro",
+    "none": "Sem fidelidade",
+    "platinum": "Platina",
+    "silver": "Prata",
+}
 MESES_PT = (
     "jan",
     "fev",
@@ -272,9 +324,17 @@ def grafico_vendas_mensais(df: pd.DataFrame) -> go.Figure:
     figura.update_traces(
         line={"color": AZUL},
         marker={"color": AZUL},
+        mode="lines+markers+text",
+        text=[numero(valor, casas=0) for valor in dados["vendas_entregues"]],
+        textposition="top center",
+        cliponaxis=False,
         hovertemplate="%{x}<br>Vendas entregues: US$ %{y:,.2f}<extra></extra>",
     )
-    figura.update_yaxes(title_text="Vendas entregues (USD)", tickformat=",.2f")
+    figura.update_yaxes(
+        title_text="Vendas entregues (USD)",
+        tickformat=",.2f",
+        showticklabels=False,
+    )
     figura.update_xaxes(title_text="Mês")
     return _base(figura)
 
@@ -287,14 +347,24 @@ def grafico_produtos_mais_vendidos(df: pd.DataFrame) -> go.Figure:
         y="nome_produto",
         orientation="h",
         title="02 · Produtos mais vendidos",
+        text=[numero(valor) for valor in dados["unidades_entregues"]],
         labels={
             "unidades_entregues": "Unidades entregues",
             "nome_produto": "Produto",
         },
         color_discrete_sequence=[AZUL],
     )
+    figura.update_traces(
+        textposition="outside",
+        cliponaxis=False,
+        hovertemplate="%{y}<br>Unidades entregues: %{x:,.0f}<extra></extra>",
+    )
     figura.update_yaxes(autorange="reversed")
-    figura.update_xaxes(title_text="Unidades entregues", tickformat=",.0f")
+    figura.update_xaxes(
+        title_text="Unidades entregues",
+        tickformat=",.0f",
+        showticklabels=False,
+    )
     return _base(figura)
 
 
@@ -306,18 +376,36 @@ def grafico_devolucoes_por_categoria(df: pd.DataFrame) -> go.Figure:
         y="categoria",
         orientation="h",
         barmode="group",
-        title="03 · Solicitações e reembolsos por categoria",
+        title=(
+            "03 · Solicitações e reembolsos por categoria"
+            "<br><sup>Percentual dos itens de cada categoria</sup>"
+        ),
         labels={
             "categoria": "Categoria",
-            "value": "Itens (%)",
+            "value": "Itens da categoria (%)",
             "variable": "Indicador",
             "pct_itens_com_solicitacao": "Com solicitação",
-            "pct_itens_reembolsados": "Reembolsados",
+            "pct_itens_reembolsados": "Com reembolso",
         },
         color_discrete_sequence=CORES[:2],
     )
+    for trace, nome in zip(
+        figura.data, ("Com solicitação", "Com reembolso"), strict=True
+    ):
+        trace.name = nome
+        trace.text = [pct(valor) for valor in trace.x]
+    figura.update_traces(
+        textposition="outside",
+        texttemplate="%{text}",
+        cliponaxis=False,
+        hovertemplate="%{y}<br>%{fullData.name}: %{x:.2f}%<extra></extra>",
+    )
     figura.update_yaxes(autorange="reversed")
-    figura.update_xaxes(title_text="Itens (%)", ticksuffix="%")
+    figura.update_xaxes(
+        title_text="Itens da categoria (%)",
+        ticksuffix="%",
+        autorange=True,
+    )
     return _base(figura)
 
 
@@ -329,102 +417,215 @@ def grafico_vendas_por_pais(df: pd.DataFrame) -> go.Figure:
         y="pais",
         orientation="h",
         title="04 · Vendas por país",
+        text=[numero(valor, casas=0) for valor in dados["valor_vendido"]],
         labels={"valor_vendido": "Vendas (USD)", "pais": "País"},
         color_discrete_sequence=[AZUL],
     )
+    figura.update_traces(
+        textposition="outside",
+        cliponaxis=False,
+        hovertemplate="%{y}<br>Vendas: US$ %{x:,.2f}<extra></extra>",
+    )
     figura.update_yaxes(autorange="reversed")
-    figura.update_xaxes(title_text="Vendas (USD)", tickformat=",.2f")
+    figura.update_xaxes(
+        title_text="Vendas (USD)",
+        tickformat=",.2f",
+        showticklabels=False,
+    )
     return _base(figura)
 
 
-def grafico_pagamentos_por_metodo(df: pd.DataFrame) -> go.Figure:
+def grafico_pagamentos_por_metodo(
+    df: pd.DataFrame, canal: str = "Todos"
+) -> go.Figure:
+    dados = df.copy()
+    dados["canal_exibicao"] = (
+        dados["canal"].map(_CANAIS_PT).fillna(dados["canal"])
+    )
+    if canal != "Todos":
+        dados = dados.loc[dados["canal_exibicao"] == canal]
+    dados["status_pagamento_exibicao"] = (
+        dados["status_pagamento"]
+        .map(_STATUS_PAGAMENTO_PT)
+        .fillna(dados["status_pagamento"])
+    )
+    dados["metodo_exibicao"] = (
+        dados["metodo"].map(_METODOS_PAGAMENTO_PT).fillna(dados["metodo"])
+    )
+    dados = dados.groupby(
+        ["metodo_exibicao", "status_pagamento_exibicao"],
+        as_index=False,
+        dropna=False,
+    )["valor_pagamentos"].sum()
     figura = px.bar(
-        df,
-        x="metodo",
-        y="valor_pagamentos",
-        color="status_pagamento",
-        facet_col="canal",
-        facet_col_wrap=2,
-        barmode="group",
+        dados,
+        x="valor_pagamentos",
+        y="metodo_exibicao",
+        orientation="h",
+        color="status_pagamento_exibicao",
+        text=[moeda_usd(valor, casas=0) for valor in dados["valor_pagamentos"]],
+        custom_data=["valor_pagamentos"],
+        barmode="stack",
         title="05 · Mix de pagamentos",
         labels={
-            "metodo": "Método de pagamento",
-            "valor_pagamentos": "Pagamentos (USD)",
-            "status_pagamento": "Status do pagamento",
-            "canal": "Canal",
+            "metodo_exibicao": "",
+            "valor_pagamentos": "% do valor",
+            "status_pagamento_exibicao": "Status do pagamento",
         },
-        color_discrete_sequence=CORES,
+        category_orders={
+            "status_pagamento_exibicao": [
+                "Capturado",
+                "Reembolsado",
+                "Falhou",
+            ]
+        },
+        color_discrete_map={
+            "Capturado": AZUL,
+            "Reembolsado": "#F28E2B",
+            "Falhou": "#E15759",
+        },
     )
-    figura.update_yaxes(title_text="Pagamentos (USD)", tickformat=",.2f")
-    figura.update_xaxes(title_text="Método de pagamento")
-    return _base(figura)
+    figura.update_traces(
+        textposition="inside",
+        texttemplate="%{text}",
+        hovertemplate=(
+            "%{y}<br>%{fullData.name}: US$ "
+            "%{customdata[0]:,.2f}<extra></extra>"
+        ),
+    )
+    figura.update_xaxes(title_text="% do valor", range=[0, 100], ticksuffix="%")
+    figura.update_yaxes(title_text="", autorange="reversed", automargin=True)
+    figura = _base(figura)
+    figura.update_layout(
+        height=470,
+        barmode="stack",
+        barnorm="percent",
+        margin={"l": 150, "r": 20, "t": 58, "b": 48},
+    )
+    return figura
 
 
 def grafico_entregas_por_transportadora(df: pd.DataFrame) -> go.Figure:
-    figura = px.scatter(
-        df,
-        x="media_dias_envio_entrega",
-        y="pct_entregues",
-        hover_name="transportadora",
-        title="06 · Prazo e taxa de entrega por transportadora",
-        labels={
-            "media_dias_envio_entrega": "Envio até entrega (dias)",
-            "pct_entregues": "Entregues (%)",
-            "transportadora": "Transportadora",
-        },
-        color_discrete_sequence=[AZUL],
+    dados = df.sort_values("media_dias_envio_entrega")
+    figura = go.Figure(
+        data=[
+            go.Table(
+                header={
+                    "values": [
+                        "Transportadora",
+                        "Prazo médio<br>envio–entrega",
+                        "Pedidos<br>entregues",
+                    ],
+                    "fill_color": "#EAF1F7",
+                    "align": ["left", "right", "right"],
+                    "font": {"color": "#14283B", "size": 13},
+                    "height": 34,
+                },
+                cells={
+                    "values": [
+                        dados["transportadora"],
+                        [
+                            f"{numero(valor, casas=2)} dias"
+                            for valor in dados["media_dias_envio_entrega"]
+                        ],
+                        [pct(valor, casas=2) for valor in dados["pct_entregues"]],
+                    ],
+                    "fill_color": [["#FFFFFF", "#F5F8FB"] * len(dados)],
+                    "align": ["left", "right", "right"],
+                    "font": {"color": "#263B4D", "size": 12},
+                    "height": 30,
+                },
+                columnwidth=[1.5, 1.2, 1],
+            )
+        ]
     )
-    figura.update_traces(
-        hovertemplate=(
-            "%{hovertext}<br>Dias: %{x:.2f}<br>"
-            "Entregues: %{y:.2f}%<extra></extra>"
-        )
+    figura.update_layout(
+        title=(
+            "06 · Prazo médio e taxa de pedidos entregues "
+            "por transportadora"
+        ),
+        height=max(330, 150 + 30 * len(dados)),
+        margin={"l": 8, "r": 8, "t": 70, "b": 8},
     )
-    figura.update_xaxes(title_text="Envio até entrega (dias)")
-    figura.update_yaxes(title_text="Entregues (%)", ticksuffix="%")
     return _base(figura)
 
 
 def grafico_descontos_por_canal(df: pd.DataFrame) -> go.Figure:
+    dados = df.copy()
+    dados["canal_exibicao"] = dados["canal"].map(_CANAIS_PT).fillna(dados["canal"])
+    dados["status_exibicao"] = (
+        dados["status_pedido"]
+        .map(_STATUS_PEDIDO_PT)
+        .fillna(dados["status_pedido"])
+    )
     figura = px.bar(
-        df,
-        x="canal",
+        dados,
+        x="canal_exibicao",
         y="pct_desconto_ponderado",
-        color="status_pedido",
+        color="status_exibicao",
         barmode="group",
         title="07 · Descontos por canal",
         labels={
-            "canal": "Canal",
+            "canal_exibicao": "Canal",
             "pct_desconto_ponderado": "Desconto ponderado (%)",
-            "status_pedido": "Status do pedido",
+            "status_exibicao": "Status do pedido",
         },
         color_discrete_sequence=CORES,
     )
-    figura.update_xaxes(title_text="Canal")
+    for trace in figura.data:
+        trace.text = [pct(valor) for valor in trace.y]
+    figura.update_traces(
+        textposition="outside",
+        texttemplate="%{text}",
+        cliponaxis=False,
+        hovertemplate="%{x}<br>%{fullData.name}: %{y:.2f}%<extra></extra>",
+    )
+    figura.update_xaxes(title_text="Canal de venda")
     figura.update_yaxes(title_text="Desconto ponderado (%)", ticksuffix="%")
     return _base(figura)
 
 
 def grafico_recorrencia_clientes(df: pd.DataFrame, pais: str | None) -> go.Figure:
-    dados = df
+    dados = df.copy()
     if pais is not None:
-        dados = df.loc[df["pais"].eq(pais)]
+        dados = dados.loc[dados["pais"].eq(pais)]
+    dados["nivel_fidelidade_exibicao"] = (
+        dados["nivel_fidelidade"]
+        .map(_NIVEIS_FIDELIDADE_PT)
+        .fillna(dados["nivel_fidelidade"])
+    )
     figura = px.bar(
         dados,
-        x="nivel_fidelidade",
+        x="nivel_fidelidade_exibicao",
         y="pct_recorrentes",
         color="pais",
         barmode="group",
-        title="08 · Recorrência por país e fidelidade",
+        title="08 · Recorrência por nível de fidelidade",
+        text=[pct(valor, casas=1) for valor in dados["pct_recorrentes"]],
         labels={
-            "nivel_fidelidade": "Nível de fidelidade",
+            "nivel_fidelidade_exibicao": "Nível de fidelidade",
             "pct_recorrentes": "Clientes recorrentes (%)",
             "pais": "País",
         },
         color_discrete_sequence=CORES,
     )
+    figura.update_traces(
+        textposition="outside",
+        cliponaxis=False,
+        hovertemplate=(
+            "%{x}<br>%{fullData.name}: %{y:.2f}% recorrentes<extra></extra>"
+        ),
+    )
+    if pais is None:
+        pais_inicial = str(df.iloc[0]["pais"])
+        for trace in figura.data:
+            trace.visible = trace.name == pais_inicial
     figura.update_xaxes(title_text="Nível de fidelidade")
-    figura.update_yaxes(title_text="Clientes recorrentes (%)", ticksuffix="%")
+    figura.update_yaxes(
+        title_text="Clientes recorrentes (%)",
+        ticksuffix="%",
+        showticklabels=False,
+    )
     return _base(figura)
 
 
@@ -435,11 +636,20 @@ def grafico_margem_estimada_produto(df: pd.DataFrame) -> go.Figure:
         y="nome_produto",
         orientation="h",
         title="09 · Margem bruta estimada por produto",
+        text=[
+            numero(valor, casas=0)
+            for valor in df["margem_bruta_estimada"]
+        ],
         labels={
             "margem_bruta_estimada": "Margem estimada (USD)",
             "nome_produto": "Produto",
         },
         color_discrete_sequence=[AZUL],
+    )
+    figura.update_traces(
+        textposition="outside",
+        cliponaxis=False,
+        hovertemplate="%{y}<br>Margem estimada: US$ %{x:,.2f}<extra></extra>",
     )
     figura.update_yaxes(autorange="reversed")
     figura.update_xaxes(title_text="Margem estimada (USD)", tickformat=",.2f")
@@ -447,31 +657,61 @@ def grafico_margem_estimada_produto(df: pd.DataFrame) -> go.Figure:
 
 
 def grafico_status_pedido_pagamento(df: pd.DataFrame) -> go.Figure:
-    figura = px.bar(
-        df,
-        x="status_pedido",
-        y=[
-            "pedidos_com_captura",
-            "pedidos_com_falha",
-            "pedidos_com_estorno",
-            "pedidos_sem_pagamento",
-        ],
-        facet_col="canal",
-        facet_col_wrap=2,
-        barmode="group",
-        title="10 · Status de pedidos e pagamentos",
-        labels={
-            "status_pedido": "Status do pedido",
-            "value": "Pedidos",
-            "variable": "Situação do pagamento",
-            "canal": "Canal",
-            "pedidos_com_captura": "Com captura",
-            "pedidos_com_falha": "Com falha",
-            "pedidos_com_estorno": "Com estorno",
-            "pedidos_sem_pagamento": "Sem pagamento",
-        },
-        color_discrete_sequence=CORES[:4],
+    colunas = (
+        ("pedidos_com_captura", "Captura"),
+        ("pedidos_com_falha", "Falha"),
+        ("pedidos_com_estorno", "Estorno"),
+        ("pedidos_sem_pagamento", "Sem pagamento"),
     )
-    figura.update_xaxes(title_text="Status do pedido")
-    figura.update_yaxes(title_text="Pedidos", tickformat=",.0f")
+    dados = df.sort_values(["canal", "status_pedido"])
+    status_canais = []
+    valores = []
+    for linha in dados.itertuples(index=False):
+        canal = _CANAIS_PT.get(linha.canal, linha.canal)
+        status = _STATUS_PEDIDO_PT.get(
+            linha.status_pedido, linha.status_pedido
+        )
+        status_canais.append(f"{status} · {canal}")
+        valores.append([int(getattr(linha, coluna)) for coluna, _ in colunas])
+
+    contagens = valores
+    z = [[log10(max(contagem, 1)) for contagem in serie] for serie in contagens]
+    texto = [[numero(contagem) for contagem in serie] for serie in contagens]
+    max_expoente = floor(max(max(serie) for serie in z))
+    figura = go.Figure(
+        data=[
+            go.Heatmap(
+                x=[rotulo for _, rotulo in colunas],
+                y=status_canais,
+                z=z,
+                text=texto,
+                customdata=contagens,
+                texttemplate="%{text}",
+                textfont={"size": 12},
+                colorscale="Blues",
+                colorbar={
+                    "title": {"text": "Pedidos<br>(escala log₁₀)"},
+                    "tickvals": list(range(max_expoente + 1)),
+                    "ticktext": [
+                        numero(10**expoente)
+                        for expoente in range(max_expoente + 1)
+                    ],
+                },
+                hovertemplate=(
+                    "%{y}<br>%{x}: %{customdata} pedidos"
+                    "<extra></extra>"
+                ),
+            )
+        ]
+    )
+    figura.update_layout(
+        title=(
+            "10 · Situação do pagamento por status do pedido e canal"
+            "<br><sup>Valores exatos nas células; cores em escala logarítmica</sup>"
+        ),
+        height=max(530, 190 + 25 * len(status_canais)),
+        xaxis_title="Situação do pagamento",
+        yaxis_title="Status do pedido · canal",
+    )
+    figura.update_yaxes(autorange="reversed")
     return _base(figura)

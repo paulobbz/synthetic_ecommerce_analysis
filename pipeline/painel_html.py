@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import date, datetime
 from html import escape
 from pathlib import Path
 
@@ -82,27 +82,27 @@ def _cartoes(dados: dict[str, pd.DataFrame]) -> str:
     pais = dados["vendas_por_pais"].iloc[0]
     cartoes = (
         _cartao(
-            "Receita entregue · último mês disponível",
+            "Receita entregue",
             painel.moeda_usd(ultimo_mes["vendas_entregues"]),
-            painel.rotular_mes(ultimo_mes["mes"]),
+            f"Mês: {painel.rotular_mes(ultimo_mes['mes'])}",
         ),
         _cartao(
-            "Pedidos entregues · último mês disponível",
+            "Pedidos entregues",
             painel.numero(ultimo_mes["pedidos_entregues"]),
-            painel.rotular_mes(ultimo_mes["mes"]),
+            f"Mês: {painel.rotular_mes(ultimo_mes['mes'])}",
         ),
         _cartao(
-            "Ticket médio · último mês disponível",
+            "Ticket médio",
             painel.moeda_usd(ultimo_mes["ticket_entregue"]),
-            painel.rotular_mes(ultimo_mes["mes"]),
+            f"Mês: {painel.rotular_mes(ultimo_mes['mes'])}",
         ),
         _cartao(
-            "Produto líder · unidades entregues",
+            "Produto líder · unidades",
             painel.numero(produto["unidades_entregues"]),
             str(produto["nome_produto"]),
         ),
         _cartao(
-            "País líder · vendas entregues",
+            "Vendas do país líder",
             painel.moeda_usd(pais["valor_vendido"]),
             str(pais["pais"]),
         ),
@@ -110,8 +110,12 @@ def _cartoes(dados: dict[str, pd.DataFrame]) -> str:
     return "\n".join(cartoes)
 
 
-def _controles_meses(df: pd.DataFrame) -> tuple[str, list[str]]:
+def _controles_meses(df: pd.DataFrame) -> tuple[str, list[str], int]:
     meses = sorted(df["mes"].dt.date.unique())
+    indice_inicio_padrao = next(
+        (indice for indice, mes in enumerate(meses) if mes >= date(2026, 1, 1)),
+        0,
+    )
     opcoes = "\n".join(
         f'<option value="{indice}">{escape(painel.rotular_mes(mes))}</option>'
         for indice, mes in enumerate(meses)
@@ -124,20 +128,26 @@ def _controles_meses(df: pd.DataFrame) -> tuple[str, list[str]]:
       <select id="mes-fim">{opcoes}</select>
     </div>
     """
-    return html_controle, [painel.rotular_mes(mes) for mes in meses]
+    return (
+        html_controle,
+        [painel.rotular_mes(mes) for mes in meses],
+        indice_inicio_padrao,
+    )
 
 
 def _controle_paises(df: pd.DataFrame) -> str:
-    paises = sorted(str(pais) for pais in df["pais"].dropna().unique())
+    pais_inicial = str(df.iloc[0]["pais"])
+    paises = dict.fromkeys(str(pais) for pais in df["pais"].dropna())
     opcoes = "\n".join(
-        f'<option value="{escape(pais, quote=True)}">{escape(pais)}</option>'
+        f'<option value="{escape(pais, quote=True)}"'
+        f'{" selected" if pais == pais_inicial else ""}>'
+        f"{escape(pais)}</option>"
         for pais in paises
     )
     return f"""
     <label class="country-filter" for="filtro-pais">
-      País · recorrência
+      País analisado · recorrência
       <select id="filtro-pais">
-        <option value="">Todos os países</option>
         {opcoes}
       </select>
     </label>
@@ -148,7 +158,8 @@ def _figuras(dados: dict[str, pd.DataFrame]) -> dict[str, str]:
     fragmentos: dict[str, str] = {}
     for indice, (identificador, nome_mart, criar_figura) in enumerate(_GRAFICOS):
         figura = criar_figura(dados[nome_mart])
-        figura.update_layout(height=470)
+        if figura.layout.height is None:
+            figura.update_layout(height=470)
         if identificador == "grafico-mensal":
             figura.update_layout(height=440)
         fragmentos[identificador] = pio.to_html(
@@ -163,7 +174,9 @@ def _figuras(dados: dict[str, pd.DataFrame]) -> dict[str, str]:
 
 def montar_html(dados: dict[str, pd.DataFrame]) -> str:
     """Monta o dashboard independente a partir dos DataFrames dos marts."""
-    controle_meses, meses = _controles_meses(dados["vendas_mensais"])
+    controle_meses, meses, indice_inicio_padrao = _controles_meses(
+        dados["vendas_mensais"]
+    )
     opcoes_mes_json = json.dumps(meses, ensure_ascii=False)
     figuras = _figuras(dados)
     gerado_em = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M %Z")
@@ -237,6 +250,9 @@ def montar_html(dados: dict[str, pd.DataFrame]) -> str:
       gap: 16px;
       margin-top: 16px;
     }}
+    .chart-grid-two {{
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }}
     .chart {{
       min-width: 0;
       overflow: hidden;
@@ -256,7 +272,7 @@ def montar_html(dados: dict[str, pd.DataFrame]) -> str:
     }}
     @media (max-width: 680px) {{
       header {{ align-items: flex-start; flex-direction: column; }}
-      .metrics, .chart-grid {{ grid-template-columns: 1fr; }}
+      .metrics, .chart-grid, .chart-grid-two {{ grid-template-columns: 1fr; }}
       .metric {{ min-height: 105px; }}
       .filter-bar {{ align-items: flex-start; flex-direction: column; }}
       .filter-group {{ flex-wrap: wrap; }}
@@ -281,24 +297,24 @@ def montar_html(dados: dict[str, pd.DataFrame]) -> str:
     <section class="chart chart-wide" aria-label="Vendas entregues por mês">
       {figuras["grafico-mensal"]}
     </section>
-    <div class="chart-grid">
+    <div class="chart-grid chart-grid-two">
       <section class="chart" aria-label="Produtos mais vendidos">{figuras["grafico-produtos"]}</section>
-      <section class="chart" aria-label="Vendas por país">{figuras["grafico-vendas-pais"]}</section>
-      <section class="chart" aria-label="Mix de pagamentos">{figuras["grafico-pagamentos"]}</section>
-    </div>
-    <div class="chart-grid">
       <section class="chart" aria-label="Solicitações e reembolsos por categoria">{figuras["grafico-devolucoes"]}</section>
+    </div>
+    <section class="chart chart-wide" aria-label="Vendas por país">{figuras["grafico-vendas-pais"]}</section>
+    <section class="chart chart-wide" aria-label="Mix de pagamentos">{figuras["grafico-pagamentos"]}</section>
+    <div class="chart-grid chart-grid-two">
       <section class="chart" aria-label="Prazo e taxa de entrega por transportadora">{figuras["grafico-entregas"]}</section>
       <section class="chart" aria-label="Descontos por canal">{figuras["grafico-descontos"]}</section>
     </div>
-    <div class="chart-grid">
+    <div class="chart-grid chart-grid-two">
       <section class="chart" aria-label="Recorrência por país e fidelidade">
         {_controle_paises(dados["recorrencia_clientes"])}
         {figuras["grafico-recorrencia"]}
       </section>
       <section class="chart" aria-label="Margem estimada por produto">{figuras["grafico-margem"]}</section>
-      <section class="chart" aria-label="Status de pedidos e pagamentos">{figuras["grafico-status"]}</section>
     </div>
+    <section class="chart chart-wide" aria-label="Status de pedidos e pagamentos">{figuras["grafico-status"]}</section>
   </main>
   <footer>
     Arquivo HTML independente. Para atualizar este snapshot, execute
@@ -306,6 +322,7 @@ def montar_html(dados: dict[str, pd.DataFrame]) -> str:
   </footer>
   <script>
     const mesesDisponiveis = {opcoes_mes_json};
+    const indiceInicioPadrao = {indice_inicio_padrao};
     const controleInicio = document.getElementById("mes-inicio");
     const controleFim = document.getElementById("mes-fim");
     const graficoMensal = document.getElementById("grafico-mensal");
@@ -314,6 +331,8 @@ def montar_html(dados: dict[str, pd.DataFrame]) -> str:
     const valoresOriginais = Array.isArray(valores)
       ? valores.slice()
       : Array.from(valores._inputArray);
+    const rotulosOriginais = graficoMensal.data[0].text.slice();
+    controleInicio.value = String(indiceInicioPadrao);
     controleFim.value = String(mesesDisponiveis.length - 1);
 
     function atualizarPeriodo() {{
@@ -335,7 +354,8 @@ def montar_html(dados: dict[str, pd.DataFrame]) -> str:
         graficoMensal,
         {{
           x: [indices.map((indice) => mesesOriginais[indice])],
-          y: [indices.map((indice) => valoresOriginais[indice])]
+          y: [indices.map((indice) => valoresOriginais[indice])],
+          text: [indices.map((indice) => rotulosOriginais[indice])]
         }},
         [0]
       );
@@ -343,6 +363,7 @@ def montar_html(dados: dict[str, pd.DataFrame]) -> str:
     }}
     controleInicio.addEventListener("change", atualizarPeriodo);
     controleFim.addEventListener("change", atualizarPeriodo);
+    atualizarPeriodo();
 
     const filtroPais = document.getElementById("filtro-pais");
     const graficoRecorrencia = document.getElementById("grafico-recorrencia");
