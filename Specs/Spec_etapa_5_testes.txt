@@ -51,7 +51,7 @@ pipeline/painel_html.py, e os arquivos SQL ficam em marts/. Nao criar
 modulos ou consultas ficticios apenas para espelhar o modelo desta spec.
 
 ARTEFATOS A PRODUZIR
-Pasta test/ na raiz, com um arquivo por modulo Python testavel:
+Pasta tests/ na raiz, com um arquivo por modulo Python testavel:
   test_db.py
   test_ingestao.py
   test_transformacao.py
@@ -75,12 +75,12 @@ SPEC
 
    Configuracao:
      [tool.pytest.ini_options]
-     testpaths = ["test"]
+     testpaths = ["tests"]
      pythonpath = ["."]
 
      [tool.coverage.run]
      source = ["."]
-     omit = ["test/*", "app.py", "ui.py", ".venv/*"]
+     omit = ["tests/*", "app.py", "ui.py", ".venv/*"]
 
      [tool.coverage.report]
      fail_under = 60
@@ -270,10 +270,10 @@ CRITERIOS DE ACEITE
   deve ser necessario renomear ou remover arquivos reais de ninguem.
 - Duas execucoes seguidas terminam com os mesmos resultados de testes e
   coverage; nao comparar tempos de execucao.
-- Busca por totais ou valores medidos do dataset real dentro de test/ nao
+- Busca por totais ou valores medidos do dataset real dentro de tests/ nao
   encontra dependencias desses resultados.
 - Testes usam exclusivamente bancos e dados sinteticos em tmp_path.
-- As alteracoes intencionais desta etapa sao testes em test/, config de
+- As alteracoes intencionais desta etapa sao testes em tests/, config de
   pytest/coverage em pyproject.toml, a correcao keep_default_na em
   pipeline/ingestao.py, a atualizacao do README e esta spec renomeada.
 
